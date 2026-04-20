@@ -1,0 +1,34 @@
+# Web framework
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.12
+
+# Config / env
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
+
+# HTTP client
+httpx==0.27.2
+
+# Database (Supabase Postgres)
+asyncpg==0.29.0
+sqlalchemy[asyncio]==2.0.35
+
+# LLM providers
+anthropic==0.39.0
+openai==1.51.0
+
+# Fuzzy string matching (for customer name resolution)
+rapidfuzz==3.10.0
+
+# Logging
+structlog==24.4.0
+
+# Testing
+pytest==8.3.3
+pytest-asyncio==0.24.0
+respx==0.21.1
+
+# Scheduling (for daily summary cron, if run in-process)
+apscheduler==3.10.4
