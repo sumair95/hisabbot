@@ -32,7 +32,10 @@ async def lifespan(app: FastAPI):
     if missing:
         log.warning("app.missing_config", missing=missing)
 
-    await db.init_pool()
+    try:
+        await db.init_pool()
+    except Exception as exc:
+        log.error("db.init_pool.failed", error=str(exc))
 
     # Schedule daily summary
     global _scheduler

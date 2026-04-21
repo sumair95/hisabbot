@@ -30,6 +30,7 @@ async def init_pool() -> None:
         max_size=5,
         statement_cache_size=0,  # Supabase pgbouncer compatibility
         command_timeout=15,
+        ssl="require",
     )
     log.info("db.pool.ready")
 
