@@ -235,6 +235,18 @@ def onboarding_done(shop_name: str, lang: Lang = "roman_urdu") -> str:
     )
 
 
+def ask_contact_confirm(new_name: str, existing_name: str, lang: Lang = "roman_urdu") -> str:
+    if lang == "english":
+        return (
+            f"Is *{new_name}* the same person as *{existing_name}* already in your records?\n"
+            "1. Yes, same person\n2. No, new person"
+        )
+    return (
+        f"Kya *{new_name}* wohi *{existing_name}* hai jo pehle se record mein hai?\n"
+        "1. Haan, wohi hai\n2. Nahi, naya banda"
+    )
+
+
 def ask_disambiguation(candidates: list[dict], lang: Lang = "roman_urdu") -> str:
     lines = (
         ["Kaun sa? Number likhein:"]

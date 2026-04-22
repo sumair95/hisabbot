@@ -35,6 +35,12 @@ def _adjusted_score(query_norm: str, candidate_norm: str) -> float:
     return base
 
 
+class UnconfirmedContact(Exception):
+    """Raised when exactly one contact fuzzy-matches — needs user confirmation."""
+    def __init__(self, match: dict):
+        self.match = match
+
+
 class AmbiguousContact(Exception):
     """Raised when multiple contacts fuzzy-match above threshold."""
     def __init__(self, matches: list[dict]):
@@ -80,8 +86,8 @@ async def resolve_contact(
         matches = [r for _, r in scored]
 
         if len(matches) == 1:
-            log.info("contact.fuzzy_match", raw=raw_name, norm=norm)
-            return matches[0]
+            log.info("contact.fuzzy_match_unconfirmed", raw=raw_name, norm=norm)
+            raise UnconfirmedContact(matches[0])
 
         if len(matches) > 1:
             log.info("contact.ambiguous", raw=raw_name, count=len(matches))

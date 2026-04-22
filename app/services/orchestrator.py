@@ -18,7 +18,7 @@ from ..models import (
 )
 from ..utils.logging import get_logger
 from . import db, llm, replies
-from .contact_matching import AmbiguousContact, find_contact_by_name, resolve_contact
+from .contact_matching import AmbiguousContact, UnconfirmedContact, find_contact_by_name, resolve_contact
 
 log = get_logger("orchestrator")
 
@@ -56,7 +56,9 @@ async def handle_message(
         )
         return replies.onboarding_done(shop_name, lang), None, None
 
-    # ---- Disambiguation: waiting for shopkeeper to pick a contact ----------
+    # ---- Pending contact confirmation or disambiguation --------------------
+    if shopkeeper.get("bot_state") == "awaiting_contact_confirm":
+        return await _handle_contact_confirm(shopkeeper, text, lang)
     if shopkeeper.get("bot_state") == "awaiting_disambiguation":
         return await _handle_disambiguation(shopkeeper, text, lang)
 
@@ -149,6 +151,28 @@ async def _handle_transaction(
         )
         try:
             contact = await resolve_contact(sk_id, txn.customer_name, contact_type)
+        except UnconfirmedContact as exc:
+            pending = {
+                "mode": "confirmation",
+                "ttype": ttype.value,
+                "amount": txn.amount,
+                "items": [i.model_dump() for i in txn.items] if txn.items else None,
+                "notes": txn.notes,
+                "contact_type": contact_type,
+                "source": source,
+                "raw_message": raw_message,
+                "transcript": transcript,
+                "new_name": txn.customer_name,
+                "existing": {"id": str(exc.match["id"]), "name": exc.match["name"]},
+            }
+            await db.update_shopkeeper(
+                sk_id,
+                bot_state="awaiting_contact_confirm",
+                pending_tx=json.dumps(pending),
+            )
+            return replies.ask_contact_confirm(
+                txn.customer_name, exc.match["name"], lang
+            ), None
         except AmbiguousContact as exc:
             # Fetch balances for each candidate so we can show them
             bal_rows = await db.get_contact_balances(sk_id)
@@ -277,6 +301,66 @@ async def _handle_query(
         return await build_daily_summary_text(shopkeeper, day)
 
     return replies.generic_error(lang)
+
+
+async def _handle_contact_confirm(
+    shopkeeper: dict, text: str, lang: str,
+) -> tuple[str, dict | None, str | None]:
+    sk_id = str(shopkeeper["id"])
+    raw_pending = shopkeeper.get("pending_tx")
+    if not raw_pending:
+        await db.update_shopkeeper(sk_id, bot_state="idle")
+        return replies.generic_error(lang), None, None
+
+    pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
+    choice = text.strip().lower()
+    yes = choice in {"1", "haan", "han", "ha", "yes", "y", "same", "wohi"}
+    no  = choice in {"2", "nahi", "nai", "no", "n", "naya", "new"}
+
+    if not yes and not no:
+        return replies.ask_contact_confirm(
+            pending["new_name"], pending["existing"]["name"], lang
+        ), None, None
+
+    await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+
+    if yes:
+        # Use the existing contact
+        contact_name = pending["existing"]["name"]
+    else:
+        # Create a new contact with the new name
+        contact_name = pending["new_name"]
+
+    contact_row = await db.find_or_create_contact(
+        sk_id, contact_name, pending["contact_type"]
+    )
+    ttype = TransactionType(pending["ttype"])
+    new_row = await db.insert_transaction(
+        shopkeeper_id=sk_id,
+        contact_id=str(contact_row["id"]),
+        type_=ttype.value,
+        amount=pending["amount"],
+        items=pending.get("items"),
+        notes=pending.get("notes"),
+        raw_message=pending.get("raw_message"),
+        transcript=pending.get("transcript"),
+        source=pending.get("source", "text"),
+    )
+    txn_id = str(new_row["id"])
+    bal_rows = await db.get_contact_balances(sk_id)
+    bal_map = {str(r["contact_id"]): float(r["balance"]) for r in bal_rows}
+    balance = bal_map.get(str(contact_row["id"]), 0.0)
+    name = contact_row["name"]
+
+    if ttype == TransactionType.SALE_CREDIT:
+        return replies.confirm_sale_credit(name, pending["amount"], balance, lang), None, txn_id
+    if ttype == TransactionType.PAYMENT_RECEIVED:
+        return replies.confirm_payment_received(name, pending["amount"], balance, lang), None, txn_id
+    if ttype == TransactionType.PAYMENT_MADE:
+        return replies.confirm_payment_made(name, pending["amount"], balance, lang), None, txn_id
+    if ttype == TransactionType.SUPPLIER_PURCHASE:
+        return replies.confirm_supplier_purchase(name, pending["amount"], balance, lang), None, txn_id
+    return replies.generic_error(lang), None, txn_id
 
 
 async def _handle_disambiguation(
