@@ -23,6 +23,18 @@ log = get_logger("contact_matching")
 FUZZY_THRESHOLD = 85  # out of 100
 
 
+def _adjusted_score(query_norm: str, candidate_norm: str) -> float:
+    """WRatio with a penalty for extra tokens in the query not in the candidate.
+    Prevents 'Ali Ahmed' from matching 'Ali' — the extra word signals a different person."""
+    base = fuzz.WRatio(query_norm, candidate_norm)
+    q_tokens = set(query_norm.split())
+    c_tokens = set(candidate_norm.split())
+    extra = q_tokens - c_tokens
+    if extra and len(q_tokens) > len(c_tokens):
+        base = max(0, base - len(extra) * 15)
+    return base
+
+
 class AmbiguousContact(Exception):
     """Raised when multiple contacts fuzzy-match above threshold."""
     def __init__(self, matches: list[dict]):
@@ -61,7 +73,7 @@ async def resolve_contact(
         )
         scored = []
         for r in rows:
-            score = fuzz.WRatio(norm, r["normalized_name"])
+            score = _adjusted_score(norm, r["normalized_name"])
             if score >= FUZZY_THRESHOLD:
                 scored.append((score, dict(r)))
         scored.sort(key=lambda x: x[0], reverse=True)
