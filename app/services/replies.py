@@ -230,9 +230,27 @@ def onboarding_done(shop_name: str, lang: Lang = "roman_urdu") -> str:
     return (
         f"✅ {shop_name} — set ho gaya.\n\n"
         "Ab jab bhi koi sale, udhaar, ya payment ho, mujhe bata dein. "
-        "Shaam ko 9 baje main aap ko full hisaab bhejunga.\n\n"
+        "Raat ko 10 baje main aap ko full hisaab bhejunga.\n\n"
         "Kabhi bhi 'aaj ki sales' ya 'kaun udhaar par hai' pooch lein."
     )
+
+
+def ask_disambiguation(candidates: list[dict], lang: Lang = "roman_urdu") -> str:
+    lines = (
+        ["Kaun sa? Number likhein:"]
+        if lang != "english"
+        else ["Which one? Reply with the number:"]
+    )
+    for i, c in enumerate(candidates, 1):
+        bal = float(c.get("balance", 0))
+        if bal > 0:
+            bal_str = f" — PKR {int(bal):,} udhaar"
+        elif bal < 0:
+            bal_str = f" — PKR {int(abs(bal)):,} dena hai"
+        else:
+            bal_str = ""
+        lines.append(f"{i}. {c['name']}{bal_str}")
+    return "\n".join(lines)
 
 
 def undo_success(lang: Lang = "roman_urdu") -> str:

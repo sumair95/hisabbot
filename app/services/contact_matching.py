@@ -13,6 +13,8 @@ Strategy:
 from __future__ import annotations
 from typing import Any
 
+from rapidfuzz import fuzz
+
 from ..utils.logging import get_logger
 from ..utils.names import normalize_name, best_match
 
@@ -21,12 +23,19 @@ log = get_logger("contact_matching")
 FUZZY_THRESHOLD = 85  # out of 100
 
 
+class AmbiguousContact(Exception):
+    """Raised when multiple contacts fuzzy-match above threshold."""
+    def __init__(self, matches: list[dict]):
+        self.matches = matches  # sorted by score descending
+
+
 async def resolve_contact(
     shopkeeper_id: str,
     raw_name: str,
     contact_type: str = "customer",
 ) -> dict[str, Any]:
-    """Find or create a contact for this shopkeeper. Returns the DB row as dict."""
+    """Find or create a contact for this shopkeeper. Returns the DB row as dict.
+    Raises AmbiguousContact when 2+ contacts match above threshold."""
     from . import db as dbs  # avoid circular import at module load
 
     norm = normalize_name(raw_name)
@@ -34,7 +43,7 @@ async def resolve_contact(
         raise ValueError("Cannot resolve empty contact name")
 
     async with dbs.conn() as c:
-        # Exact normalized match
+        # Exact normalized match — unambiguous, return immediately
         row = await c.fetchrow(
             """
             SELECT * FROM contacts
@@ -45,20 +54,28 @@ async def resolve_contact(
         if row:
             return dict(row)
 
-        # Fuzzy match among this shop's contacts of same type
+        # Collect ALL fuzzy matches above threshold
         rows = await c.fetch(
-            "SELECT id, normalized_name FROM contacts WHERE shopkeeper_id = $1 AND type = $2",
+            "SELECT * FROM contacts WHERE shopkeeper_id = $1 AND type = $2",
             shopkeeper_id, contact_type,
         )
-        candidates = [(str(r["id"]), r["normalized_name"]) for r in rows]
-        match = best_match(norm, candidates, threshold=FUZZY_THRESHOLD)
-        if match:
-            cid, score = match
-            log.info("contact.fuzzy_match", raw=raw_name, norm=norm, score=score)
-            row = await c.fetchrow("SELECT * FROM contacts WHERE id = $1", cid)
-            return dict(row)
+        scored = []
+        for r in rows:
+            score = fuzz.WRatio(norm, r["normalized_name"])
+            if score >= FUZZY_THRESHOLD:
+                scored.append((score, dict(r)))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        matches = [r for _, r in scored]
 
-        # Create new
+        if len(matches) == 1:
+            log.info("contact.fuzzy_match", raw=raw_name, norm=norm)
+            return matches[0]
+
+        if len(matches) > 1:
+            log.info("contact.ambiguous", raw=raw_name, count=len(matches))
+            raise AmbiguousContact(matches)
+
+        # No match — create new contact
         row = await c.fetchrow(
             """
             INSERT INTO contacts (shopkeeper_id, name, normalized_name, type)
