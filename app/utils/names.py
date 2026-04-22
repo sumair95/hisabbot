@@ -62,7 +62,12 @@ def normalize_name(raw: str | None) -> str:
 
     # Remove honorific tokens
     tokens = [t for t in s.split(" ") if t and t not in _HONORIFICS]
-    return " ".join(tokens)
+    s = " ".join(tokens)
+
+    # Separate digits from letters so "Ali1" and "Ali 1" both become "ali 1"
+    s = re.sub(r'([a-z])(\d)', r'\1 \2', s)
+    s = re.sub(r'(\d)([a-z])', r'\1 \2', s)
+    return re.sub(r'\s+', ' ', s).strip()
 
 
 def best_match(

@@ -18,7 +18,10 @@ from ..models import (
 )
 from ..utils.logging import get_logger
 from . import db, llm, replies
-from .contact_matching import AmbiguousContact, UnconfirmedContact, find_contact_by_name, resolve_contact
+from .contact_matching import (
+    AmbiguousContact, UnconfirmedContact,
+    find_contact_by_name, mark_confirmed, resolve_contact,
+)
 
 log = get_logger("orchestrator")
 
@@ -325,15 +328,14 @@ async def _handle_contact_confirm(
     await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
 
     if yes:
-        # Use the existing contact
         contact_name = pending["existing"]["name"]
     else:
-        # Create a new contact with the new name
         contact_name = pending["new_name"]
 
     contact_row = await db.find_or_create_contact(
         sk_id, contact_name, pending["contact_type"]
     )
+    mark_confirmed(sk_id, str(contact_row["id"]))
     ttype = TransactionType(pending["ttype"])
     new_row = await db.insert_transaction(
         shopkeeper_id=sk_id,
@@ -394,13 +396,12 @@ async def _handle_disambiguation(
         # Ask again
         return replies.ask_disambiguation(candidates, lang), None, None
 
-    # Clear pending state
     await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
 
-    # Complete the transaction with chosen contact
     contact_row = await db.find_or_create_contact(
         sk_id, selected["name"], pending["contact_type"]
     )
+    mark_confirmed(sk_id, str(contact_row["id"]))
     ttype = TransactionType(pending["ttype"])
     new_row = await db.insert_transaction(
         shopkeeper_id=sk_id,
