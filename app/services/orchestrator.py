@@ -316,9 +316,9 @@ async def _handle_contact_confirm(
         return replies.generic_error(lang), None, None
 
     pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
-    choice = text.strip().lower()
-    yes = choice in {"1", "haan", "han", "ha", "yes", "y", "same", "wohi"}
-    no  = choice in {"2", "nahi", "nai", "no", "n", "naya", "new"}
+    tokens = set(text.strip().lower().split())
+    yes = bool(tokens & {"1", "haan", "han", "ha", "yes", "same", "wohi", "theek", "bilkul"})
+    no  = bool(tokens & {"2", "nahi", "nai", "no", "naya", "new", "alag", "different"})
 
     if not yes and not no:
         return replies.ask_contact_confirm(
@@ -328,13 +328,12 @@ async def _handle_contact_confirm(
     await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
 
     if yes:
-        contact_name = pending["existing"]["name"]
+        contact_row = await db.get_contact_by_id(pending["existing"]["id"])
+        if not contact_row:
+            contact_row = await db.create_contact(sk_id, pending["existing"]["name"], pending["contact_type"])
     else:
-        contact_name = pending["new_name"]
+        contact_row = await db.create_contact(sk_id, pending["new_name"], pending["contact_type"])
 
-    contact_row = await db.find_or_create_contact(
-        sk_id, contact_name, pending["contact_type"]
-    )
     mark_confirmed(sk_id, str(contact_row["id"]))
     ttype = TransactionType(pending["ttype"])
     new_row = await db.insert_transaction(
@@ -398,9 +397,9 @@ async def _handle_disambiguation(
 
     await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
 
-    contact_row = await db.find_or_create_contact(
-        sk_id, selected["name"], pending["contact_type"]
-    )
+    contact_row = await db.get_contact_by_id(selected["id"])
+    if not contact_row:
+        contact_row = await db.create_contact(sk_id, selected["name"], pending["contact_type"])
     mark_confirmed(sk_id, str(contact_row["id"]))
     ttype = TransactionType(pending["ttype"])
     new_row = await db.insert_transaction(

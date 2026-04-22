@@ -89,6 +89,33 @@ async def update_shopkeeper(sk_id: str, **fields) -> None:
 # Contact ops
 # =====================================================
 
+async def get_contact_by_id(contact_id: str) -> dict[str, Any] | None:
+    async with conn() as c:
+        row = await c.fetchrow("SELECT * FROM contacts WHERE id = $1", contact_id)
+    return dict(row) if row else None
+
+
+async def create_contact(
+    shopkeeper_id: str, name: str, contact_type: str = "customer",
+) -> dict[str, Any]:
+    from ..utils.names import normalize_name as _norm
+    from .contact_matching import _invalidate
+    norm = _norm(name)
+    async with conn() as c:
+        row = await c.fetchrow(
+            """
+            INSERT INTO contacts (shopkeeper_id, name, normalized_name, type)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (shopkeeper_id, normalized_name, type) DO UPDATE
+              SET name = EXCLUDED.name
+            RETURNING *
+            """,
+            shopkeeper_id, name.strip(), norm, contact_type,
+        )
+    _invalidate(shopkeeper_id)
+    return dict(row)
+
+
 async def find_or_create_contact(
     shopkeeper_id: str,
     name: str,
