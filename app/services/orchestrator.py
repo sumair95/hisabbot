@@ -13,6 +13,8 @@ import json
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from datetime import timedelta
+
 from ..models import (
     ExtractionResult, Intent, QueryType, TransactionType,
 )
@@ -97,6 +99,10 @@ async def handle_message(
 
     if extraction.intent == Intent.QUERY and extraction.query:
         reply = await _handle_query(shopkeeper, extraction, lang)
+        return reply, extraction_json, None
+
+    if extraction.intent == Intent.REMINDER and extraction.reminder:
+        reply = await _handle_reminder(shopkeeper, extraction, lang)
         return reply, extraction_json, None
 
     if extraction.intent == Intent.CORRECTION:
@@ -429,6 +435,50 @@ async def _handle_disambiguation(
     if ttype == TransactionType.SUPPLIER_PURCHASE:
         return replies.confirm_supplier_purchase(name, pending["amount"], balance, lang), None, txn_id
     return replies.generic_error(lang), None, txn_id
+
+
+async def _handle_reminder(
+    shopkeeper: dict, extraction: ExtractionResult, lang: str,
+) -> str:
+    from zoneinfo import ZoneInfo
+    r = extraction.reminder
+    assert r is not None
+    sk_id = str(shopkeeper["id"])
+    tz = shopkeeper.get("timezone", "Asia/Karachi")
+    today = datetime.now(ZoneInfo(tz)).date()
+
+    # Parse remind_date
+    if not r.remind_date or r.remind_date == "tomorrow":
+        remind_on = today + timedelta(days=1)
+    else:
+        try:
+            remind_on = date.fromisoformat(r.remind_date)
+        except ValueError:
+            remind_on = today + timedelta(days=1)
+
+    # Resolve contact if named
+    contact_id = None
+    if r.person_name:
+        try:
+            contact = await resolve_contact(sk_id, r.person_name)
+            contact_id = str(contact["id"])
+            mark_confirmed(sk_id, contact_id)
+        except Exception:
+            pass  # reminder still saved without contact link
+
+    await db.create_reminder(
+        shopkeeper_id=sk_id,
+        description=r.description,
+        remind_on=remind_on,
+        contact_id=contact_id,
+        amount=r.amount,
+    )
+
+    date_str = (
+        "Kal" if remind_on == today + timedelta(days=1)
+        else remind_on.strftime("%-d %B")
+    )
+    return replies.confirm_reminder(r.description, date_str, lang)
 
 
 def _date_from_range(rng: str, tz: str) -> date:

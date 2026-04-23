@@ -21,6 +21,8 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         payment received, payment made, supplier purchase)
       - QUERY: the shopkeeper is asking for info (totals, balances, who owes)
       - CORRECTION: the shopkeeper is fixing or undoing a previous entry
+      - REMINDER: the shopkeeper wants to be reminded to pay/receive money
+        on a future date ("kal Ahmed ko 500 dene hain", "3 May ko bijli bill")
       - ONBOARDING: the shopkeeper is answering a setup question (e.g. shop name)
       - GREETING_OR_OTHER: hi/hello/thanks/anything else
 
@@ -40,7 +42,7 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
 
     Output schema (strict):
     {
-      "intent": "TRANSACTION"|"QUERY"|"CORRECTION"|"ONBOARDING"|"GREETING_OR_OTHER",
+      "intent": "TRANSACTION"|"QUERY"|"CORRECTION"|"REMINDER"|"ONBOARDING"|"GREETING_OR_OTHER",
       "transaction": {
         "transaction_type": "sale_cash"|"sale_credit"|"payment_received"|"payment_made"|"supplier_purchase",
         "customer_name": "Ahmed" | null,
@@ -53,6 +55,12 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "query_type": "daily_sales"|"who_owes_me"|"who_i_owe"|"customer_balance"|"daily_summary",
         "customer_name": "Ahmed" | null,
         "date_range": "today"|"yesterday"|"this_week"|"this_month"|"all"
+      } | null,
+      "reminder": {
+        "description": "Ahmed ko 500 dene hain",
+        "person_name": "Ahmed" | null,
+        "amount": 500 | null,
+        "remind_date": "tomorrow" | "YYYY-MM-DD" | null
       } | null,
       "correction_hint": "last entry galat thi" | null,
       "language_detected": "urdu"|"roman_urdu"|"english"|"mixed",
@@ -109,7 +117,19 @@ EXTRACTION_EXAMPLES = dedent("""
 
     Example 8 (ambiguous — needs clarification)
     User: "Ahmed"
-    {"intent":"GREETING_OR_OTHER","transaction":null,"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":true,"clarification_question":"Ahmed ke baare mein kya karna hai? Udhaar, payment, ya balance check?"}
+    {"intent":"GREETING_OR_OTHER","transaction":null,"query":null,"reminder":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":true,"clarification_question":"Ahmed ke baare mein kya karna hai? Udhaar, payment, ya balance check?"}
+
+    Example 9 (reminder — tomorrow, no date given)
+    User: "Ahmed ko kal 500 dene hain"
+    {"intent":"REMINDER","transaction":null,"query":null,"reminder":{"description":"Ahmed ko 500 dene hain","person_name":"Ahmed","amount":500,"remind_date":"tomorrow"},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 10 (reminder — specific date)
+    User: "3 May ko bijli ka bill 2000 dena hai"
+    {"intent":"REMINDER","transaction":null,"query":null,"reminder":{"description":"bijli ka bill dena hai","person_name":null,"amount":2000,"remind_date":"2026-05-03"},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 11 (reminder — no date, defaults to tomorrow)
+    User: "supplier ko maal ka paisa dena yaad rakhna"
+    {"intent":"REMINDER","transaction":null,"query":null,"reminder":{"description":"supplier ko maal ka paisa dena hai","person_name":"supplier","amount":null,"remind_date":null},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 """).strip()
 
 

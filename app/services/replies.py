@@ -235,6 +235,22 @@ def onboarding_done(shop_name: str, lang: Lang = "roman_urdu") -> str:
     )
 
 
+def confirm_reminder(description: str, remind_on: str, lang: Lang = "roman_urdu") -> str:
+    if lang == "english":
+        return f"⏰ Reminder saved! I'll remind you on {remind_on} at 9 AM:\n\"{description}\""
+    return f"⏰ Yaad rakhoon ga! {remind_on} ko subah 9 baje reminder bhejunga:\n\"{description}\""
+
+
+def reminder_notification(description: str, amount: float | None, person: str | None, lang: Lang = "roman_urdu") -> str:
+    parts = ["⏰ Yaad dihani:"] if lang != "english" else ["⏰ Reminder:"]
+    parts.append(f"\"{description}\"")
+    if amount:
+        parts.append(f"Raqam: PKR {int(amount):,}" if lang != "english" else f"Amount: PKR {int(amount):,}")
+    if person:
+        parts.append(f"Shakhs: {person}" if lang != "english" else f"Person: {person}")
+    return "\n".join(parts)
+
+
 def ask_contact_confirm(new_name: str, existing_name: str, lang: Lang = "roman_urdu") -> str:
     if lang == "english":
         return (

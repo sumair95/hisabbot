@@ -14,7 +14,7 @@ from fastapi import FastAPI
 
 from .config import get_settings
 from .routers import ops, webhook
-from .services import db, daily_summary
+from .services import db, daily_summary, reminders
 from .utils.logging import configure_logging, get_logger
 
 configure_logging()
@@ -45,6 +45,12 @@ async def lifespan(app: FastAPI):
             daily_summary.run_daily_summary_for_all,
             CronTrigger(hour=settings.daily_summary_hour, minute=0),
             id="daily_summary",
+            replace_existing=True,
+        )
+        _scheduler.add_job(
+            reminders.run_reminders_for_all,
+            CronTrigger(hour=9, minute=0),
+            id="reminders",
             replace_existing=True,
         )
         _scheduler.start()

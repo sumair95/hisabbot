@@ -300,6 +300,51 @@ async def compute_daily_aggregates(
     return {k: float(v or 0) for k, v in dict(row).items()}
 
 
+# =====================================================
+# Reminder ops
+# =====================================================
+
+async def create_reminder(
+    shopkeeper_id: str,
+    description: str,
+    remind_on: date,
+    contact_id: str | None = None,
+    amount: float | None = None,
+) -> dict[str, Any]:
+    async with conn() as c:
+        row = await c.fetchrow(
+            """
+            INSERT INTO reminders (shopkeeper_id, contact_id, amount, description, remind_on)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING *
+            """,
+            shopkeeper_id, contact_id, amount, description, remind_on,
+        )
+    return dict(row)
+
+
+async def get_due_reminders(remind_on: date) -> list[dict[str, Any]]:
+    async with conn() as c:
+        rows = await c.fetch(
+            """
+            SELECT r.*, s.phone_number, s.language_pref, s.timezone
+              FROM reminders r
+              JOIN shopkeepers s ON s.id = r.shopkeeper_id
+             WHERE r.remind_on = $1 AND r.is_sent = FALSE
+            """,
+            remind_on,
+        )
+    return [dict(r) for r in rows]
+
+
+async def mark_reminder_sent(reminder_id: str) -> None:
+    async with conn() as c:
+        await c.execute(
+            "UPDATE reminders SET is_sent = TRUE, sent_at = NOW() WHERE id = $1",
+            reminder_id,
+        )
+
+
 async def save_daily_summary(
     shopkeeper_id: str, day: date, aggregates: dict, summary_text: str,
 ) -> None:

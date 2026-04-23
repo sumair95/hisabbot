@@ -14,6 +14,7 @@ class Intent(str, Enum):
     TRANSACTION = "TRANSACTION"
     QUERY = "QUERY"
     CORRECTION = "CORRECTION"
+    REMINDER = "REMINDER"
     ONBOARDING = "ONBOARDING"
     GREETING_OR_OTHER = "GREETING_OR_OTHER"
 
@@ -55,12 +56,20 @@ class ExtractedQuery(BaseModel):
     date_range: Literal["today", "yesterday", "this_week", "this_month", "all"] = "today"
 
 
+class ExtractedReminder(BaseModel):
+    description: str
+    person_name: str | None = None
+    amount: float | None = None
+    remind_date: str | None = None  # "tomorrow", "YYYY-MM-DD", or null → defaults to tomorrow
+
+
 class ExtractionResult(BaseModel):
     """Top-level output from the extraction LLM call."""
     intent: Intent
     transaction: ExtractedTransaction | None = None
     query: ExtractedQuery | None = None
-    correction_hint: str | None = None  # free text if intent == CORRECTION
+    reminder: ExtractedReminder | None = None
+    correction_hint: str | None = None
     language_detected: Literal["urdu", "roman_urdu", "english", "mixed"] = "roman_urdu"
     needs_clarification: bool = False
     clarification_question: str | None = None
