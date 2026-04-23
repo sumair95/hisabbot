@@ -70,8 +70,11 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
 
     Rules:
     - "udhaar diya / udhaar par liya" = sale_credit (shopkeeper gave goods on credit)
-    - "wapas mile / paisay diye / payment kar diya" = payment_received
-    - "supplier ko diye" = payment_made
+    - "wapas mile / wapis mile / wapas diye / wapis diye / paisay diye / payment kar diya /
+       ne diye / ny diye / bhej diye / lota diya" = payment_received (customer paid back)
+    - "ny" and "ne" are Urdu subject markers (e.g. "Ali ny diye" = "Ali gave") —
+      the person named is the one paying, so intent = payment_received
+    - "supplier ko diye / supplier ko bheji" = payment_made
     - Amounts may be written as "500", "500 rupay", "500rs", "5 sau", "hazaar",
       "do hazaar". Convert to a plain number. "hazaar" = 1000, "lakh" = 100000.
     - Strip honorifics from customer_name (bhai, sahib, apa, baji, uncle, ji).
@@ -119,15 +122,19 @@ EXTRACTION_EXAMPLES = dedent("""
     User: "Ahmed"
     {"intent":"GREETING_OR_OTHER","transaction":null,"query":null,"reminder":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":true,"clarification_question":"Ahmed ke baare mein kya karna hai? Udhaar, payment, ya balance check?"}
 
-    Example 9 (reminder — tomorrow, no date given)
+    Example 9 (payment received — "ny/ne diye" pattern)
+    User: "Ali ny 400rs wapis diye"
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"payment_received","customer_name":"Ali","amount":400,"items":[],"notes":null,"confidence":0.95},"query":null,"reminder":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 10 (reminder — tomorrow keyword)
     User: "Ahmed ko kal 500 dene hain"
     {"intent":"REMINDER","transaction":null,"query":null,"reminder":{"description":"Ahmed ko 500 dene hain","person_name":"Ahmed","amount":500,"remind_date":"tomorrow"},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
-    Example 10 (reminder — specific date)
+    Example 11 (reminder — specific date)
     User: "3 May ko bijli ka bill 2000 dena hai"
     {"intent":"REMINDER","transaction":null,"query":null,"reminder":{"description":"bijli ka bill dena hai","person_name":null,"amount":2000,"remind_date":"2026-05-03"},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
-    Example 11 (reminder — no date, defaults to tomorrow)
+    Example 12 (reminder — no date)
     User: "supplier ko maal ka paisa dena yaad rakhna"
     {"intent":"REMINDER","transaction":null,"query":null,"reminder":{"description":"supplier ko maal ka paisa dena hai","person_name":"supplier","amount":null,"remind_date":null},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 """).strip()

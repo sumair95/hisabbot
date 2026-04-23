@@ -41,15 +41,16 @@ async def lifespan(app: FastAPI):
     global _scheduler
     if settings.is_production and not missing:
         _scheduler = AsyncIOScheduler(timezone=settings.default_timezone)
+        tz = settings.default_timezone
         _scheduler.add_job(
             daily_summary.run_daily_summary_for_all,
-            CronTrigger(hour=settings.daily_summary_hour, minute=0),
+            CronTrigger(hour=settings.daily_summary_hour, minute=0, timezone=tz),
             id="daily_summary",
             replace_existing=True,
         )
         _scheduler.add_job(
             reminders.run_reminders_for_all,
-            CronTrigger(hour=9, minute=0),
+            CronTrigger(hour=9, minute=0, timezone=tz),
             id="reminders",
             replace_existing=True,
         )
