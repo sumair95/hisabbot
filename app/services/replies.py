@@ -12,7 +12,6 @@ Lang = str  # 'roman_urdu' | 'urdu' | 'english'
 
 
 def _fmt_money(amount: float) -> str:
-    # PKR values are typically whole numbers; show decimals only if needed.
     if amount == int(amount):
         return f"PKR {int(amount):,}"
     return f"PKR {amount:,.2f}"
@@ -26,7 +25,7 @@ def confirm_sale_credit(name: str, amount: float, balance: float, lang: Lang = "
     m = _fmt_money(amount)
     b = _fmt_money(balance)
     if lang == "urdu":
-        return f"✅ {name} ko {m} udhaar. Kul udhaar: {b}\n\nGhalat hai? 'undo' likhein."
+        return f"✅ {name} کو {m} ادھار دیا۔\nکل ادھار {name} کا: {b}\n\nغلط ہے؟ 'undo' لکھیں۔"
     if lang == "english":
         return f"✅ Credit sale to {name}: {m}. Total owed by {name}: {b}\n\nWrong? Reply 'undo'."
     return f"✅ {name} ko {m} udhaar. Kul udhaar {name} ka: {b}\n\nGhalat hai? 'undo' likhein."
@@ -35,6 +34,8 @@ def confirm_sale_credit(name: str, amount: float, balance: float, lang: Lang = "
 def confirm_sale_cash(amount: float, today_total: float, lang: Lang = "roman_urdu") -> str:
     m = _fmt_money(amount)
     t = _fmt_money(today_total)
+    if lang == "urdu":
+        return f"✅ {m} نقد فروخت لکھ دی۔\nآج کی نقد فروخت: {t}\n\nغلط ہے؟ 'undo' لکھیں۔"
     if lang == "english":
         return f"✅ Cash sale {m}. Today's cash total: {t}\n\nWrong? Reply 'undo'."
     return f"✅ Cash sale {m} likh di. Aaj ki cash sales: {t}\n\nGhalat hai? 'undo' likhein."
@@ -43,6 +44,9 @@ def confirm_sale_cash(amount: float, today_total: float, lang: Lang = "roman_urd
 def confirm_payment_received(name: str, amount: float, balance: float, lang: Lang = "roman_urdu") -> str:
     m = _fmt_money(amount)
     b = _fmt_money(balance)
+    if lang == "urdu":
+        tail = f"{name} کا باقی ادھار: {b}" if balance > 0 else f"{name} کا حساب صاف ہو گیا۔ ✅"
+        return f"✅ {name} سے {m} ملے۔\n{tail}\n\nغلط ہے؟ 'undo' لکھیں۔"
     if lang == "english":
         tail = f"{name} still owes {b}." if balance > 0 else f"{name}'s balance is clear. ✅"
         return f"✅ Received {m} from {name}. {tail}\n\nWrong? Reply 'undo'."
@@ -56,6 +60,9 @@ def confirm_payment_received(name: str, amount: float, balance: float, lang: Lan
 def confirm_payment_made(name: str, amount: float, balance: float, lang: Lang = "roman_urdu") -> str:
     m = _fmt_money(amount)
     b = _fmt_money(abs(balance))
+    if lang == "urdu":
+        tail = f"آپ کو {name} کو ابھی {b} اور دینے ہیں۔" if balance < 0 else f"{name} کا حساب صاف۔"
+        return f"✅ {name} کو {m} دیے۔\n{tail}\n\nغلط ہے؟ 'undo' لکھیں۔"
     if lang == "english":
         tail = f"You still owe {name} {b}." if balance < 0 else "Balance clear."
         return f"✅ Paid {m} to {name}. {tail}\n\nWrong? Reply 'undo'."
@@ -69,6 +76,8 @@ def confirm_payment_made(name: str, amount: float, balance: float, lang: Lang = 
 def confirm_supplier_purchase(name: str, amount: float, balance: float, lang: Lang = "roman_urdu") -> str:
     m = _fmt_money(amount)
     b = _fmt_money(abs(balance))
+    if lang == "urdu":
+        return f"✅ {name} سے {m} کا مال ادھار لیا۔\n{name} کو دینا ہے: {b}\n\nغلط ہے؟ 'undo' لکھیں۔"
     if lang == "english":
         return f"✅ Purchased {m} from {name} on credit. You owe {name} {b}.\n\nWrong? Reply 'undo'."
     return f"✅ {name} se {m} ka maal udhaar liya. {name} ko dena hai: {b}\n\nGhalat hai? 'undo' likhein."
@@ -82,6 +91,8 @@ def reply_daily_sales(cash: float, credit: float, lang: Lang = "roman_urdu") -> 
     c = _fmt_money(cash)
     u = _fmt_money(credit)
     total = _fmt_money(cash + credit)
+    if lang == "urdu":
+        return f"📊 آج کی فروخت:\n• نقد: {c}\n• ادھار: {u}\n• کل: {total}"
     if lang == "english":
         return f"📊 Today's sales:\n• Cash: {c}\n• Credit: {u}\n• Total: {total}"
     return f"📊 Aaj ki sales:\n• Cash: {c}\n• Udhaar: {u}\n• Total: {total}"
@@ -89,12 +100,17 @@ def reply_daily_sales(cash: float, credit: float, lang: Lang = "roman_urdu") -> 
 
 def reply_who_owes_me(rows: list[dict], lang: Lang = "roman_urdu") -> str:
     if not rows:
-        return (
-            "Abhi kisi ka udhaar baqi nahi. ✅"
-            if lang != "english"
-            else "No one owes you money right now. ✅"
-        )
-    header = "🔴 Udhaar lene wale:" if lang != "english" else "🔴 Customers who owe you:"
+        if lang == "urdu":
+            return "ابھی کسی کا ادھار باقی نہیں۔ ✅"
+        if lang == "english":
+            return "No one owes you money right now. ✅"
+        return "Abhi kisi ka udhaar baqi nahi. ✅"
+    if lang == "urdu":
+        header = "🔴 ادھار لینے والے:"
+    elif lang == "english":
+        header = "🔴 Customers who owe you:"
+    else:
+        header = "🔴 Udhaar lene wale:"
     lines = [header]
     total = 0.0
     for r in rows[:15]:
@@ -104,20 +120,25 @@ def reply_who_owes_me(rows: list[dict], lang: Lang = "roman_urdu") -> str:
     if len(rows) > 15:
         lines.append(f"... aur {len(rows) - 15} log" if lang != "english" else f"... and {len(rows)-15} more")
     lines.append("")
-    lines.append(
-        f"Kul: {_fmt_money(total)}" if lang != "english" else f"Total: {_fmt_money(total)}"
-    )
+    lines.append(f"کل: {_fmt_money(total)}" if lang == "urdu" else
+                 f"Total: {_fmt_money(total)}" if lang == "english" else
+                 f"Kul: {_fmt_money(total)}")
     return "\n".join(lines)
 
 
 def reply_who_i_owe(rows: list[dict], lang: Lang = "roman_urdu") -> str:
     if not rows:
-        return (
-            "Aap par kisi supplier ka baqi nahi. ✅"
-            if lang != "english"
-            else "You don't owe any supplier right now. ✅"
-        )
-    header = "🟢 Supplier ko dene hain:" if lang != "english" else "🟢 Suppliers you owe:"
+        if lang == "urdu":
+            return "آپ پر کسی سپلائر کا باقی نہیں۔ ✅"
+        if lang == "english":
+            return "You don't owe any supplier right now. ✅"
+        return "Aap par kisi supplier ka baqi nahi. ✅"
+    if lang == "urdu":
+        header = "🟢 سپلائر کو دینا ہے:"
+    elif lang == "english":
+        header = "🟢 Suppliers you owe:"
+    else:
+        header = "🟢 Supplier ko dene hain:"
     lines = [header]
     total = 0.0
     for r in rows[:15]:
@@ -125,38 +146,38 @@ def reply_who_i_owe(rows: list[dict], lang: Lang = "roman_urdu") -> str:
         total += bal
         lines.append(f"• {r['name']} — {_fmt_money(bal)}")
     lines.append("")
-    lines.append(
-        f"Kul: {_fmt_money(total)}" if lang != "english" else f"Total: {_fmt_money(total)}"
-    )
+    lines.append(f"کل: {_fmt_money(total)}" if lang == "urdu" else
+                 f"Total: {_fmt_money(total)}" if lang == "english" else
+                 f"Kul: {_fmt_money(total)}")
     return "\n".join(lines)
 
 
 def reply_customer_balance(name: str, balance: float, lang: Lang = "roman_urdu") -> str:
     if balance == 0:
-        return (
-            f"{name} ka hisaab clear hai. ✅"
-            if lang != "english"
-            else f"{name}'s balance is clear. ✅"
-        )
+        if lang == "urdu":
+            return f"{name} کا حساب صاف ہے۔ ✅"
+        if lang == "english":
+            return f"{name}'s balance is clear. ✅"
+        return f"{name} ka hisaab clear hai. ✅"
     if balance > 0:
-        return (
-            f"{name} ne aap ko {_fmt_money(balance)} dene hain."
-            if lang != "english"
-            else f"{name} owes you {_fmt_money(balance)}."
-        )
-    return (
-        f"Aap ko {name} ko {_fmt_money(abs(balance))} dene hain."
-        if lang != "english"
-        else f"You owe {name} {_fmt_money(abs(balance))}."
-    )
+        if lang == "urdu":
+            return f"{name} نے آپ کو {_fmt_money(balance)} دینے ہیں۔"
+        if lang == "english":
+            return f"{name} owes you {_fmt_money(balance)}."
+        return f"{name} ne aap ko {_fmt_money(balance)} dene hain."
+    if lang == "urdu":
+        return f"آپ کو {name} کو {_fmt_money(abs(balance))} دینے ہیں۔"
+    if lang == "english":
+        return f"You owe {name} {_fmt_money(abs(balance))}."
+    return f"Aap ko {name} ko {_fmt_money(abs(balance))} dene hain."
 
 
 def reply_customer_not_found(name: str, lang: Lang = "roman_urdu") -> str:
-    return (
-        f"'{name}' naam ka koi customer nahi mila. Spelling check karein."
-        if lang != "english"
-        else f"No customer found with name '{name}'. Please check the spelling."
-    )
+    if lang == "urdu":
+        return f"'{name}' نام کا کوئی کسٹمر نہیں ملا۔ ہجے چیک کریں۔"
+    if lang == "english":
+        return f"No customer found with name '{name}'. Please check the spelling."
+    return f"'{name}' naam ka koi customer nahi mila. Spelling check karein."
 
 
 # ============================================================
@@ -174,32 +195,46 @@ def format_daily_summary(
     lang: Lang = "roman_urdu",
 ) -> str:
     net = cash_sales + payments_received - payments_made
+    date_str = summary_date.strftime('%d %b %Y')
+
+    if lang == "urdu":
+        lines = [
+            f"🧾 آج کا حساب — {date_str}", "",
+            f"💰 نقد فروخت: {_fmt_money(cash_sales)}",
+            f"📝 ادھار فروخت: {_fmt_money(credit_sales)}",
+            f"💵 پیسے ملے: {_fmt_money(payments_received)}",
+            f"📦 سپلائر کو دیے: {_fmt_money(payments_made)}",
+        ]
+        if top_debtors:
+            lines += ["", "🔴 ادھار لینے والے (ٹاپ):"]
+            for r in top_debtors[:5]:
+                lines.append(f"• {r['name']} — {_fmt_money(float(r['balance']))}")
+        if top_suppliers:
+            lines += ["", "🟢 سپلائر کو دینا ہے:"]
+            for r in top_suppliers[:5]:
+                lines.append(f"• {r['name']} — {_fmt_money(abs(float(r['balance'])))}")
+        lines += ["", f"خالص آج: {'+' if net >= 0 else ''}{_fmt_money(net)}", "", "برکت ہو! 🌙"]
+        return "\n".join(lines)
+
     is_en = lang == "english"
     title = "🧾 Daily Summary" if is_en else "🧾 Aaj ka Hisaab"
     lines = [
-        f"{title} — {summary_date.strftime('%d %b %Y')}",
-        "",
+        f"{title} — {date_str}", "",
         f"💰 {'Cash sales' if is_en else 'Cash Sales'}: {_fmt_money(cash_sales)}",
         f"📝 {'Credit sales' if is_en else 'Udhaar Sales'}: {_fmt_money(credit_sales)}",
         f"💵 {'Payments received' if is_en else 'Paisay Mile'}: {_fmt_money(payments_received)}",
         f"📦 {'Paid to suppliers' if is_en else 'Supplier ko Diye'}: {_fmt_money(payments_made)}",
     ]
     if top_debtors:
-        lines.append("")
-        lines.append("🔴 " + ("Top people who owe you:" if is_en else "Udhaar Lene Wale (Top):"))
+        lines += ["", "🔴 " + ("Top people who owe you:" if is_en else "Udhaar Lene Wale (Top):")]
         for r in top_debtors[:5]:
             lines.append(f"• {r['name']} — {_fmt_money(float(r['balance']))}")
     if top_suppliers:
-        lines.append("")
-        lines.append("🟢 " + ("Top suppliers you owe:" if is_en else "Supplier ko Dene Hain:"))
+        lines += ["", "🟢 " + ("Top suppliers you owe:" if is_en else "Supplier ko Dene Hain:")]
         for r in top_suppliers[:5]:
             lines.append(f"• {r['name']} — {_fmt_money(abs(float(r['balance'])))}")
-    lines.append("")
-    lines.append(
-        f"{'Net today' if is_en else 'Net aaj'}: {'+' if net >= 0 else ''}{_fmt_money(net)}"
-    )
-    lines.append("")
-    lines.append("Barkat ho! 🌙" if not is_en else "Have a good evening! 🌙")
+    lines += ["", f"{'Net today' if is_en else 'Net aaj'}: {'+' if net >= 0 else ''}{_fmt_money(net)}", ""]
+    lines.append("Have a good evening! 🌙" if is_en else "Barkat ho! 🌙")
     return "\n".join(lines)
 
 
@@ -208,6 +243,36 @@ def format_daily_summary(
 # ============================================================
 
 def onboarding_welcome(lang: Lang = "roman_urdu") -> str:
+    lang_tip = (
+        "🌐 زبان تبدیل کریں:\n"
+        "• اردو رسم الخط کے لیے: 'اردو' لکھیں\n"
+        "• رومن اردو کے لیے: 'roman urdu'\n"
+        "• انگریزی کے لیے: 'english'\n\n"
+    )
+    if lang == "urdu":
+        return (
+            "السلام علیکم! 🌙\n\n"
+            "میں آپ کا واٹس ایپ حساب کتاب ہوں۔ آپ مجھے ٹیکسٹ یا وائس نوٹ بھیج سکتے ہیں — میں سب کچھ لکھ لوں گا۔\n\n"
+            "مثالیں:\n"
+            "• \"احمد کو ۵۰۰ ادھار دیا\"\n"
+            "• \"بلال سے ۱۲۰۰ واپس ملے\"\n"
+            "• \"۲ کلو چینی ۳۰۰ نقد\"\n"
+            "• \"آج کی سیلز کتنی ہے؟\"\n\n"
+            f"{lang_tip}"
+            "پہلے مجھے اپنی دکان کا نام بتائیں۔"
+        )
+    if lang == "english":
+        return (
+            "Assalam-o-alaikum! 🌙\n\n"
+            "I'm your WhatsApp bookkeeping assistant. Send me text or voice notes — I'll record everything.\n\n"
+            "Examples:\n"
+            "• \"Ahmed ko 500 udhaar diya\"\n"
+            "• \"Bilal se 1200 wapas mile\"\n"
+            "• \"2 kg cheeni 300 cash\"\n"
+            "• \"Today's sales?\"\n\n"
+            "🌐 Change language: type 'اردو' for Urdu script, 'roman urdu', or 'english'\n\n"
+            "First, tell me your shop name."
+        )
     return (
         "Assalam-o-alaikum! 🌙\n\n"
         "Main aap ka WhatsApp hisaab-assistant hoon. Aap mujhe text ya voice note bhej "
@@ -218,15 +283,41 @@ def onboarding_welcome(lang: Lang = "roman_urdu") -> str:
         "• \"2 kg cheeni 300 cash\"\n"
         "• \"aaj ki sales kitni hai?\"\n"
         "• \"kaun kaun udhaar par hai?\"\n\n"
+        "🌐 Zaban tabdeel karein:\n"
+        "• Urdu script ke liye: 'اردو' likhein\n"
+        "• Roman Urdu: 'roman urdu'\n"
+        "• English: 'english'\n\n"
         "Pehle mujhe apni dukaan ka naam bata dein."
     )
 
 
 def onboarding_ask_shop_name(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "اپنی دکان کا نام لکھیں (مثلاً 'احمد جنرل اسٹور')۔"
+    if lang == "english":
+        return "Please type your shop name (e.g. 'Ahmed General Store')."
     return "Apni dukaan ka naam likhein (e.g. 'Ahmed General Store')."
 
 
 def onboarding_done(shop_name: str, lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return (
+            f"✅ {shop_name} — سیٹ ہو گیا۔\n\n"
+            "اب جب بھی کوئی سیل، ادھار، یا ادائیگی ہو، مجھے بتائیں۔ "
+            "رات کو ۱۰ بجے میں آپ کو پورا حساب بھیجوں گا۔\n\n"
+            "کبھی بھی 'آج کی سیلز' یا 'کون ادھار پر ہے' پوچھ لیں۔\n\n"
+            "🔊 وائس نوٹ میں جواب چاہیے؟ 'voice on' لکھیں۔\n"
+            "🔇 بند کرنے کے لیے: 'voice off' لکھیں۔"
+        )
+    if lang == "english":
+        return (
+            f"✅ {shop_name} — all set!\n\n"
+            "Now whenever there's a sale, credit, or payment, just tell me. "
+            "I'll send you a full summary at 10 PM every night.\n\n"
+            "Ask anytime: 'today's sales' or 'who owes me'.\n\n"
+            "🔊 Want voice replies? Type 'voice on'.\n"
+            "🔇 To turn off: 'voice off'."
+        )
     return (
         f"✅ {shop_name} — set ho gaya.\n\n"
         "Ab jab bhi koi sale, udhaar, ya payment ho, mujhe bata dein. "
@@ -237,29 +328,43 @@ def onboarding_done(shop_name: str, lang: Lang = "roman_urdu") -> str:
     )
 
 
-def voice_note_tip(lang: Lang = "roman_urdu") -> str:
-    if lang == "english":
-        return "💡 Want voice replies? Reply *voice on*. To keep text only: *voice off*."
-    return "💡 Voice note mein jawab chahiye? *voice on* likhein. Text chahiye to: *voice off*."
-
-
 def confirm_reminder(description: str, remind_on: str, lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return f"⏰ یاد رکھوں گا! {remind_on} کو صبح ۹ بجے یاد دہانی بھیجوں گا:\n\"{description}\""
     if lang == "english":
         return f"⏰ Reminder saved! I'll remind you on {remind_on} at 9 AM:\n\"{description}\""
     return f"⏰ Yaad rakhoon ga! {remind_on} ko subah 9 baje reminder bhejunga:\n\"{description}\""
 
 
 def reminder_notification(description: str, amount: float | None, person: str | None, lang: Lang = "roman_urdu") -> str:
-    parts = ["⏰ Yaad dihani:"] if lang != "english" else ["⏰ Reminder:"]
-    parts.append(f"\"{description}\"")
+    if lang == "urdu":
+        parts = ["⏰ یاد دہانی:", f"\"{description}\""]
+        if amount:
+            parts.append(f"رقم: PKR {int(amount):,}")
+        if person:
+            parts.append(f"شخص: {person}")
+        return "\n".join(parts)
+    if lang == "english":
+        parts = ["⏰ Reminder:", f"\"{description}\""]
+        if amount:
+            parts.append(f"Amount: PKR {int(amount):,}")
+        if person:
+            parts.append(f"Person: {person}")
+        return "\n".join(parts)
+    parts = ["⏰ Yaad dihani:", f"\"{description}\""]
     if amount:
-        parts.append(f"Raqam: PKR {int(amount):,}" if lang != "english" else f"Amount: PKR {int(amount):,}")
+        parts.append(f"Raqam: PKR {int(amount):,}")
     if person:
-        parts.append(f"Shakhs: {person}" if lang != "english" else f"Person: {person}")
+        parts.append(f"Shakhs: {person}")
     return "\n".join(parts)
 
 
 def ask_contact_confirm(new_name: str, existing_name: str, lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return (
+            f"کیا *{new_name}* وہی *{existing_name}* ہے جو پہلے سے ریکارڈ میں ہے؟\n"
+            "۱. ہاں، وہی ہے\n۲. نہیں، نیا بندہ"
+        )
     if lang == "english":
         return (
             f"Is *{new_name}* the same person as *{existing_name}* already in your records?\n"
@@ -272,17 +377,18 @@ def ask_contact_confirm(new_name: str, existing_name: str, lang: Lang = "roman_u
 
 
 def ask_disambiguation(candidates: list[dict], lang: Lang = "roman_urdu") -> str:
-    lines = (
-        ["Kaun sa? Number likhein:"]
-        if lang != "english"
-        else ["Which one? Reply with the number:"]
-    )
+    if lang == "urdu":
+        lines = ["کون سا؟ نمبر لکھیں:"]
+    elif lang == "english":
+        lines = ["Which one? Reply with the number:"]
+    else:
+        lines = ["Kaun sa? Number likhein:"]
     for i, c in enumerate(candidates, 1):
         bal = float(c.get("balance", 0))
         if bal > 0:
-            bal_str = f" — PKR {int(bal):,} udhaar"
+            bal_str = f" — PKR {int(bal):,} {'ادھار' if lang == 'urdu' else 'udhaar'}"
         elif bal < 0:
-            bal_str = f" — PKR {int(abs(bal)):,} dena hai"
+            bal_str = f" — PKR {int(abs(bal)):,} {'دینا ہے' if lang == 'urdu' else 'dena hai'}"
         else:
             bal_str = ""
         lines.append(f"{i}. {c['name']}{bal_str}")
@@ -290,40 +396,81 @@ def ask_disambiguation(candidates: list[dict], lang: Lang = "roman_urdu") -> str
 
 
 def undo_success(lang: Lang = "roman_urdu") -> str:
-    return (
-        "✅ Last entry hata di."
-        if lang != "english"
-        else "✅ Last entry removed."
-    )
+    if lang == "urdu":
+        return "✅ آخری اندراج ہٹا دیا۔"
+    if lang == "english":
+        return "✅ Last entry removed."
+    return "✅ Last entry hata di."
 
 
 def undo_nothing(lang: Lang = "roman_urdu") -> str:
-    return (
-        "Koi entry nahi mili jisay hata sakein."
-        if lang != "english"
-        else "No entry found to remove."
-    )
+    if lang == "urdu":
+        return "کوئی اندراج نہیں ملا جسے ہٹا سکیں۔"
+    if lang == "english":
+        return "No entry found to remove."
+    return "Koi entry nahi mili jisay hata sakein."
 
 
 def need_clarification(q: str, lang: Lang = "roman_urdu") -> str:
     return q
 
 
+def generic_error(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "معاف کریں، ابھی چھوٹی سی دقت ہے۔ تھوڑی دیر بعد کوشش کریں۔"
+    if lang == "english":
+        return "Sorry, something went wrong. Please try again in a moment."
+    return "Maaf kijiye, abhi chhoti si dikkat hai. Thori dair baad try karein."
+
+
+# ============================================================
+# Voice reply toggle
+# ============================================================
+
 def voice_reply_enabled(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "🔊 وائس ریپلائی آن کر دی۔ جب آپ وائس نوٹ بھیجیں گے میں بھی آواز میں جواب دوں گا۔\nبند کرنے کے لیے: 'voice off' لکھیں۔"
     if lang == "english":
         return "🔊 Voice replies ON. I'll reply with audio when you send a voice note.\n\nTo turn off: reply 'voice off'."
     return "🔊 Voice reply on kar diya. Jab aap voice note bhejenge main bhi voice mein jawab dunga.\n\nBand karne ke liye: 'voice off' likhein."
 
 
 def voice_reply_disabled(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "🔇 وائس ریپلائی بند کر دی۔ اب صرف ٹیکسٹ میں جواب ملے گا۔\nچالو کرنے کے لیے: 'voice on' لکھیں۔"
     if lang == "english":
         return "🔇 Voice replies OFF. I'll reply with text only.\n\nTo turn on: reply 'voice on'."
     return "🔇 Voice reply band kar diya. Ab sirf text mein jawab milega.\n\nChalu karne ke liye: 'voice on' likhein."
 
 
-def generic_error(lang: Lang = "roman_urdu") -> str:
+def voice_note_tip(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "💡 وائس نوٹ میں جواب چاہیے؟ *voice on* لکھیں۔ ٹیکسٹ چاہیے تو: *voice off*۔"
+    if lang == "english":
+        return "💡 Want voice replies? Reply *voice on*. To keep text only: *voice off*."
+    return "💡 Voice note mein jawab chahiye? *voice on* likhein. Text chahiye to: *voice off* likhein."
+
+
+# ============================================================
+# Language toggle
+# ============================================================
+
+def lang_switched(new_lang: Lang) -> str:
+    if new_lang == "urdu":
+        return (
+            "✅ ٹھیک ہے! اب میں اردو میں جواب دوں گا۔\n\n"
+            "تبدیل کرنے کے لیے:\n"
+            "• رومن اردو: 'roman urdu' لکھیں\n"
+            "• انگریزی: 'english' لکھیں"
+        )
+    if new_lang == "english":
+        return (
+            "✅ Done! I'll reply in English from now on.\n\n"
+            "To change: type 'اردو' for Urdu script, or 'roman urdu'."
+        )
     return (
-        "Maaf kijiye, abhi chhoti si dikkat hai. Thori dair baad try karein."
-        if lang != "english"
-        else "Sorry, something went wrong. Please try again in a moment."
+        "✅ Theek hai! Ab Roman Urdu mein jawab dunga.\n\n"
+        "Tabdeel karne ke liye:\n"
+        "• Urdu script: 'اردو' likhein\n"
+        "• English: 'english' likhein"
     )

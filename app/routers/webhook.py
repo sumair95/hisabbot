@@ -15,6 +15,10 @@ from ..utils.logging import get_logger
 _VOICE_ON_TOKENS  = {"voice on", "voice reply on", "audio on", "awaz on", "audio reply on"}
 _VOICE_OFF_TOKENS = {"voice off", "voice reply off", "audio off", "awaz off", "voice band", "audio reply off"}
 
+_LANG_URDU_TOKENS   = {"urdu", "اردو", "urdu script", "urdu mein", "اردو میں"}
+_LANG_ROMAN_TOKENS  = {"roman urdu", "roman", "roman mein", "roman urdu mein"}
+_LANG_ENGLISH_TOKENS = {"english", "angrezi", "انگریزی", "english mein"}
+
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 log = get_logger("webhook")
 
@@ -148,6 +152,22 @@ async def _process_one_message(msg: dict, value: dict) -> None:
         await db.update_shopkeeper(sk_id, voice_reply=False)
         shopkeeper = await db.get_or_create_shopkeeper(phone_number)
         reply_text = replies.voice_reply_disabled(lang)
+        await _send_reply(phone_number, reply_text, kind="text", sk_id=sk_id, wa_id=wa_id,
+                          text_content=text_content, transcript=transcript,
+                          extraction_json=None, txn_id=None, use_voice=False)
+        return
+
+    # ---- Language toggle ----
+    new_lang = None
+    if normalized in _LANG_URDU_TOKENS:
+        new_lang = "urdu"
+    elif normalized in _LANG_ROMAN_TOKENS:
+        new_lang = "roman_urdu"
+    elif normalized in _LANG_ENGLISH_TOKENS:
+        new_lang = "english"
+    if new_lang:
+        await db.update_shopkeeper(sk_id, language_pref=new_lang)
+        reply_text = replies.lang_switched(new_lang)
         await _send_reply(phone_number, reply_text, kind="text", sk_id=sk_id, wa_id=wa_id,
                           text_content=text_content, transcript=transcript,
                           extraction_json=None, txn_id=None, use_voice=False)
