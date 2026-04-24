@@ -205,6 +205,14 @@ async def _send_reply(
     Falls back to text if TTS or media upload fails.
     """
     sent_kind = "text"
+    # Always send text first
+    try:
+        await whatsapp.send_text(phone_number, reply_text)
+    except Exception as e:  # noqa: BLE001
+        log.error("webhook.reply_failed", error=str(e))
+        return
+
+    # Also send audio when voice reply is enabled
     if use_voice:
         try:
             audio_bytes = await tts.synthesize(reply_text)
@@ -214,18 +222,6 @@ async def _send_reply(
             log.info("webhook.voice_reply_sent", to=phone_number)
         except Exception as e:  # noqa: BLE001
             log.error("webhook.voice_reply_failed", error=str(e))
-            # Fall back to text
-            try:
-                await whatsapp.send_text(phone_number, reply_text)
-            except Exception as e2:  # noqa: BLE001
-                log.error("webhook.reply_failed", error=str(e2))
-                return
-    else:
-        try:
-            await whatsapp.send_text(phone_number, reply_text)
-        except Exception as e:  # noqa: BLE001
-            log.error("webhook.reply_failed", error=str(e))
-            return
 
     await db.log_message(
         shopkeeper_id=sk_id,
