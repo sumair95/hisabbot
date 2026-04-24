@@ -301,6 +301,18 @@ def need_clarification(q: str, lang: Lang = "roman_urdu") -> str:
     return q
 
 
+def voice_reply_enabled(lang: Lang = "roman_urdu") -> str:
+    if lang == "english":
+        return "🔊 Voice replies ON. I'll reply with audio when you send a voice note.\n\nTo turn off: reply 'voice off'."
+    return "🔊 Voice reply on kar diya. Jab aap voice note bhejenge main bhi voice mein jawab dunga.\n\nBand karne ke liye: 'voice off' likhein."
+
+
+def voice_reply_disabled(lang: Lang = "roman_urdu") -> str:
+    if lang == "english":
+        return "🔇 Voice replies OFF. I'll reply with text only.\n\nTo turn on: reply 'voice on'."
+    return "🔇 Voice reply band kar diya. Ab sirf text mein jawab milega.\n\nChalu karne ke liye: 'voice on' likhein."
+
+
 def generic_error(lang: Lang = "roman_urdu") -> str:
     return (
         "Maaf kijiye, abhi chhoti si dikkat hai. Thori dair baad try karein."

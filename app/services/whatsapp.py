@@ -103,6 +103,51 @@ async def send_template(
         return r.json()
 
 
+# ----- outbound: send audio (voice reply) --------------------
+
+async def upload_media(audio_bytes: bytes, mime_type: str = "audio/mpeg") -> str:
+    """Upload audio bytes to WhatsApp media endpoint. Returns media_id."""
+    settings = get_settings()
+    url = f"{GRAPH_BASE}/{settings.whatsapp_phone_number_id}/media"
+    auth_headers = {"Authorization": f"Bearer {settings.whatsapp_access_token}"}
+    files = {
+        "file": ("reply.mp3", audio_bytes, mime_type),
+        "messaging_product": (None, "whatsapp"),
+        "type": (None, mime_type),
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.post(url, headers=auth_headers, files=files)
+        if r.status_code >= 400:
+            log.error("whatsapp.upload_media.error", status=r.status_code, body=r.text)
+            r.raise_for_status()
+        media_id: str = r.json()["id"]
+        log.info("whatsapp.media_uploaded", media_id=media_id)
+        return media_id
+
+
+async def send_audio(to: str, media_id: str) -> dict[str, Any]:
+    settings = get_settings()
+    if not settings.whatsapp_access_token or not settings.whatsapp_phone_number_id:
+        log.warning("whatsapp.send_audio.skipped", reason="not_configured", to=to)
+        return {"skipped": True}
+    url = f"{GRAPH_BASE}/{settings.whatsapp_phone_number_id}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to,
+        "type": "audio",
+        "audio": {"id": media_id},
+    }
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await client.post(url, headers=_headers(), json=payload)
+        if r.status_code >= 400:
+            log.error("whatsapp.send_audio.error", status=r.status_code, body=r.text)
+            r.raise_for_status()
+        data = r.json()
+        log.info("whatsapp.audio_sent", to=to, id=data.get("messages", [{}])[0].get("id"))
+        return data
+
+
 # ----- inbound: fetch media (voice note bytes) ---------------
 
 async def fetch_media(media_id: str) -> tuple[bytes, str]:
