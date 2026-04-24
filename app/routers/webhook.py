@@ -12,12 +12,27 @@ from ..config import get_settings
 from ..services import db, orchestrator, replies, stt, tts, whatsapp
 from ..utils.logging import get_logger
 
-_VOICE_ON_TOKENS  = {"voice on", "voice reply on", "audio on", "awaz on", "audio reply on"}
-_VOICE_OFF_TOKENS = {"voice off", "voice reply off", "audio off", "awaz off", "voice band", "audio reply off"}
+_VOICE_ON_PHRASES  = {"voice on", "voice reply on", "audio on", "awaz on"}
+_VOICE_OFF_PHRASES = {"voice off", "voice reply off", "audio off", "awaz off", "voice band"}
 
-_LANG_URDU_TOKENS   = {"urdu", "اردو", "urdu script", "urdu mein", "اردو میں"}
-_LANG_ROMAN_TOKENS  = {"roman urdu", "roman", "roman mein", "roman urdu mein"}
-_LANG_ENGLISH_TOKENS = {"english", "angrezi", "انگریزی", "english mein"}
+_LANG_URDU_PHRASES   = {"urdu on", "urdu mein", "urdu script", "اردو میں", "اردو میں لکھو", "urdu likhein", "urdu jawab"}
+_LANG_ROMAN_PHRASES  = {"roman urdu", "roman mein", "roman likhein"}
+_LANG_ENGLISH_PHRASES = {"english on", "english mein", "english mein jawab", "angrezi mein", "reply in english"}
+
+# Single-word triggers handled separately (need word-boundary check to avoid false positives)
+_LANG_URDU_WORDS   = {"اردو", "urdu"}
+_LANG_ROMAN_WORDS  = {"roman"}
+_LANG_ENGLISH_WORDS = {"english", "angrezi", "انگریزی"}
+
+
+def _contains(text: str, phrases: set) -> bool:
+    """True if any phrase appears as a substring in text."""
+    return any(p in text for p in phrases)
+
+
+def _word_match(text: str, words: set) -> bool:
+    """True if text is ONLY one of the given words (short command)."""
+    return text.strip() in words
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 log = get_logger("webhook")
@@ -138,32 +153,30 @@ async def _process_one_message(msg: dict, value: dict) -> None:
 
     lang = shopkeeper.get("language_pref") or "roman_urdu"
 
-    # ---- Voice reply toggle (handled before LLM to save cost) ----
+    # ---- Voice reply toggle + language toggle (work from text OR voice note) ----
     normalized = text_content.strip().lower()
-    if normalized in _VOICE_ON_TOKENS:
+
+    if _contains(normalized, _VOICE_ON_PHRASES):
         await db.update_shopkeeper(sk_id, voice_reply=True)
-        shopkeeper = await db.get_or_create_shopkeeper(phone_number)
         reply_text = replies.voice_reply_enabled(lang)
         await _send_reply(phone_number, reply_text, kind="text", sk_id=sk_id, wa_id=wa_id,
                           text_content=text_content, transcript=transcript,
                           extraction_json=None, txn_id=None, use_voice=False)
         return
-    if normalized in _VOICE_OFF_TOKENS:
+    if _contains(normalized, _VOICE_OFF_PHRASES):
         await db.update_shopkeeper(sk_id, voice_reply=False)
-        shopkeeper = await db.get_or_create_shopkeeper(phone_number)
         reply_text = replies.voice_reply_disabled(lang)
         await _send_reply(phone_number, reply_text, kind="text", sk_id=sk_id, wa_id=wa_id,
                           text_content=text_content, transcript=transcript,
                           extraction_json=None, txn_id=None, use_voice=False)
         return
 
-    # ---- Language toggle ----
     new_lang = None
-    if normalized in _LANG_URDU_TOKENS:
+    if _contains(normalized, _LANG_URDU_PHRASES) or _word_match(normalized, _LANG_URDU_WORDS):
         new_lang = "urdu"
-    elif normalized in _LANG_ROMAN_TOKENS:
+    elif _contains(normalized, _LANG_ROMAN_PHRASES) or _word_match(normalized, _LANG_ROMAN_WORDS):
         new_lang = "roman_urdu"
-    elif normalized in _LANG_ENGLISH_TOKENS:
+    elif _contains(normalized, _LANG_ENGLISH_PHRASES) or _word_match(normalized, _LANG_ENGLISH_WORDS):
         new_lang = "english"
     if new_lang:
         await db.update_shopkeeper(sk_id, language_pref=new_lang)
