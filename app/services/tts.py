@@ -24,8 +24,6 @@ async def synthesize(text: str) -> bytes:
         input=text[:4096],
         response_format="mp3",
     )
-    audio = b""
-    async for chunk in response.iter_bytes(chunk_size=4096):
-        audio += chunk
+    audio: bytes = response.content
     log.info("tts.synthesized", chars=len(text), bytes=len(audio))
     return audio

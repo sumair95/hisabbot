@@ -110,13 +110,10 @@ async def upload_media(audio_bytes: bytes, mime_type: str = "audio/mpeg") -> str
     settings = get_settings()
     url = f"{GRAPH_BASE}/{settings.whatsapp_phone_number_id}/media"
     auth_headers = {"Authorization": f"Bearer {settings.whatsapp_access_token}"}
-    files = {
-        "file": ("reply.mp3", audio_bytes, mime_type),
-        "messaging_product": (None, "whatsapp"),
-        "type": (None, mime_type),
-    }
+    files = {"file": ("reply.mp3", audio_bytes, mime_type)}
+    data  = {"messaging_product": "whatsapp", "type": mime_type}
     async with httpx.AsyncClient(timeout=30.0) as client:
-        r = await client.post(url, headers=auth_headers, files=files)
+        r = await client.post(url, headers=auth_headers, files=files, data=data)
         if r.status_code >= 400:
             log.error("whatsapp.upload_media.error", status=r.status_code, body=r.text)
             r.raise_for_status()
