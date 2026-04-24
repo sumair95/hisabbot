@@ -177,6 +177,11 @@ async def _process_one_message(msg: dict, value: dict) -> None:
     )
 
     use_voice = bool(shopkeeper.get("voice_reply")) and kind == "voice"
+
+    # Append voice tip when they send a voice note but voice reply is still off
+    if kind == "voice" and not use_voice:
+        reply_text = reply_text + "\n\n" + replies.voice_note_tip(lang)
+
     await _send_reply(phone_number, reply_text, kind=kind, sk_id=sk_id, wa_id=None,
                       text_content=None, transcript=None,
                       extraction_json=extraction_json, txn_id=txn_id,

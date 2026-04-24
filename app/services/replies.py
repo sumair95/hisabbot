@@ -231,8 +231,16 @@ def onboarding_done(shop_name: str, lang: Lang = "roman_urdu") -> str:
         f"✅ {shop_name} — set ho gaya.\n\n"
         "Ab jab bhi koi sale, udhaar, ya payment ho, mujhe bata dein. "
         "Raat ko 10 baje main aap ko full hisaab bhejunga.\n\n"
-        "Kabhi bhi 'aaj ki sales' ya 'kaun udhaar par hai' pooch lein."
+        "Kabhi bhi 'aaj ki sales' ya 'kaun udhaar par hai' pooch lein.\n\n"
+        "🔊 Voice note mein jawab chahiye? 'voice on' likhein.\n"
+        "🔇 Band karne ke liye: 'voice off' likhein."
     )
+
+
+def voice_note_tip(lang: Lang = "roman_urdu") -> str:
+    if lang == "english":
+        return "💡 Want voice replies? Reply *voice on*. To keep text only: *voice off*."
+    return "💡 Voice note mein jawab chahiye? *voice on* likhein. Text chahiye to: *voice off*."
 
 
 def confirm_reminder(description: str, remind_on: str, lang: Lang = "roman_urdu") -> str:
