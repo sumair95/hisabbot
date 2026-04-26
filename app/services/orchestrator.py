@@ -61,7 +61,9 @@ async def handle_message(
         )
         return replies.onboarding_done(shop_name, lang), None, None
 
-    # ---- Pending contact confirmation or disambiguation --------------------
+    # ---- Pending multi-turn states ----------------------------------------
+    if shopkeeper.get("bot_state") == "awaiting_tx_confirm":
+        return await _handle_tx_confirm(shopkeeper, text, lang)
     if shopkeeper.get("bot_state") == "awaiting_contact_confirm":
         return await _handle_contact_confirm(shopkeeper, text, lang)
     if shopkeeper.get("bot_state") == "awaiting_disambiguation":
@@ -142,6 +144,21 @@ async def _handle_transaction(
     assert txn is not None
     sk_id = str(shopkeeper["id"])
     ttype = txn.transaction_type
+
+    # Low-confidence: ask shopkeeper to confirm before writing to DB
+    if (txn.confidence or 1.0) < 0.75:
+        desc = replies.tx_description(ttype.value, txn.customer_name, txn.amount, lang)
+        pending = {
+            "mode": "tx_confirm",
+            "extraction": extraction.model_dump(mode="json"),
+            "source": source,
+            "raw_message": raw_message,
+            "transcript": transcript,
+        }
+        await db.update_shopkeeper(
+            sk_id, bot_state="awaiting_tx_confirm", pending_tx=json.dumps(pending)
+        )
+        return replies.ask_tx_confirm(desc, lang), None
 
     # Resolve contact if one is named / required
     contact = None
@@ -435,6 +452,52 @@ async def _handle_disambiguation(
     if ttype == TransactionType.SUPPLIER_PURCHASE:
         return replies.confirm_supplier_purchase(name, pending["amount"], balance, lang), None, txn_id
     return replies.generic_error(lang), None, txn_id
+
+
+async def _handle_tx_confirm(
+    shopkeeper: dict, text: str, lang: str,
+) -> tuple[str, dict | None, str | None]:
+    sk_id = str(shopkeeper["id"])
+    raw_pending = shopkeeper.get("pending_tx")
+    if not raw_pending:
+        await db.update_shopkeeper(sk_id, bot_state="idle")
+        return replies.generic_error(lang), None, None
+
+    pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
+    tokens = set(text.strip().lower().split())
+    yes = bool(tokens & {"1", "haan", "han", "ha", "yes", "sahi", "theek", "bilkul", "correct", "ok", "ہاں"})
+    no  = bool(tokens & {"2", "nahi", "nai", "no", "galat", "ghalat", "cancel", "nahi", "نہیں"})
+
+    if not yes and not no:
+        # Ask again
+        ext_data = pending["extraction"]
+        txn_data = ext_data.get("transaction", {})
+        desc = replies.tx_description(
+            txn_data.get("transaction_type", ""),
+            txn_data.get("customer_name"),
+            txn_data.get("amount", 0),
+            lang,
+        )
+        return replies.ask_tx_confirm(desc, lang), None, None
+
+    await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+
+    if no:
+        return replies.tx_confirm_cancelled(lang), None, None
+
+    # Reconstruct extraction, force confidence high so it doesn't loop
+    from ..models import ExtractionResult
+    extraction = ExtractionResult.model_validate(pending["extraction"])
+    if extraction.transaction:
+        extraction.transaction.confidence = 1.0
+
+    reply, txn_id = await _handle_transaction(
+        shopkeeper, extraction, lang,
+        raw_message=pending.get("raw_message"),
+        transcript=pending.get("transcript"),
+        source=pending.get("source", "text"),
+    )
+    return reply, pending["extraction"], txn_id
 
 
 async def _handle_reminder(

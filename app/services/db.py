@@ -345,6 +345,22 @@ async def mark_reminder_sent(reminder_id: str) -> None:
         )
 
 
+async def count_voice_today(shopkeeper_id: str, tz: str = "Asia/Karachi") -> int:
+    today = datetime.now(ZoneInfo(tz)).date()
+    async with conn() as c:
+        row = await c.fetchrow(
+            """
+            SELECT COUNT(*) AS cnt FROM messages
+             WHERE shopkeeper_id = $1
+               AND direction = 'inbound'
+               AND kind = 'voice'
+               AND (created_at AT TIME ZONE $2)::date = $3
+            """,
+            shopkeeper_id, tz, today,
+        )
+    return int(row["cnt"])
+
+
 async def save_daily_summary(
     shopkeeper_id: str, day: date, aggregates: dict, summary_text: str,
 ) -> None:

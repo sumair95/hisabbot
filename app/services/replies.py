@@ -452,6 +452,51 @@ def voice_note_tip(lang: Lang = "roman_urdu") -> str:
 
 
 # ============================================================
+# Low-confidence transaction confirmation
+# ============================================================
+
+def tx_description(ttype: str, name: str | None, amount: float, lang: Lang = "roman_urdu") -> str:
+    m = _fmt_money(amount)
+    if ttype == "sale_credit":
+        if lang == "urdu":    return f"{name} کو {m} ادھار"
+        if lang == "english": return f"Credit {m} to {name}"
+        return f"{name} ko {m} udhaar"
+    if ttype == "payment_received":
+        if lang == "urdu":    return f"{name} سے {m} ملے"
+        if lang == "english": return f"Received {m} from {name}"
+        return f"{name} se {m} mile"
+    if ttype == "sale_cash":
+        if lang == "urdu":    return f"{m} نقد فروخت"
+        if lang == "english": return f"Cash sale {m}"
+        return f"{m} cash sale"
+    if ttype == "payment_made":
+        if lang == "urdu":    return f"{name} کو {m} دیے"
+        if lang == "english": return f"Paid {m} to {name}"
+        return f"{name} ko {m} diye"
+    if ttype == "supplier_purchase":
+        if lang == "urdu":    return f"{name} سے {m} کا مال ادھار"
+        if lang == "english": return f"Stock {m} from {name} on credit"
+        return f"{name} se {m} ka maal udhaar"
+    return m
+
+
+def ask_tx_confirm(description: str, lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return f"میں نے سمجھا:\n*{description}*\n\nصحیح ہے؟ (ہاں / نہیں)"
+    if lang == "english":
+        return f"I understood:\n*{description}*\n\nIs this correct? (yes / no)"
+    return f"Maine likha:\n*{description}*\n\nSahi hai? (haan / nahi)"
+
+
+def tx_confirm_cancelled(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "ٹھیک ہے، یہ اندراج منسوخ کر دیا۔ دوبارہ واضح طور پر بھیجیں۔"
+    if lang == "english":
+        return "OK, entry cancelled. Please send it again more clearly."
+    return "Theek hai, entry cancel kar di. Dobara clearly bhejein."
+
+
+# ============================================================
 # Language toggle
 # ============================================================
 

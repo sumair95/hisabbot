@@ -153,6 +153,21 @@ async def _process_one_message(msg: dict, value: dict) -> None:
 
     lang = shopkeeper.get("language_pref") or "roman_urdu"
 
+    # ---- Rate limit: max 200 voice notes per shopkeeper per day ----
+    if kind == "voice":
+        tz = shopkeeper.get("timezone", "Asia/Karachi")
+        count = await db.count_voice_today(sk_id, tz)
+        if count >= get_settings().max_voice_notes_per_day:
+            limit_msg = (
+                "آج کی وائس نوٹ حد پوری ہو گئی۔ کل دوبارہ یا ابھی ٹیکسٹ بھیجیں۔"
+                if lang == "urdu" else
+                "Today's voice note limit reached. Please send a text message instead."
+                if lang == "english" else
+                "Aaj ki voice note limit poori ho gayi. Text mein bhejein ya kal dobara try karein."
+            )
+            await whatsapp.send_text(phone_number, limit_msg)
+            return
+
     # ---- Voice reply toggle + language toggle (work from text OR voice note) ----
     normalized = text_content.strip().lower()
 
