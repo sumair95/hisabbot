@@ -511,6 +511,82 @@ def voice_note_tip(lang: Lang = "roman_urdu") -> str:
 
 
 # ============================================================
+# Category breakdown (on-demand after daily summary)
+# ============================================================
+
+_CATEGORY_EMOJI = {
+    "grains":        "🌾",
+    "drinks":        "🥤",
+    "snacks":        "🍪",
+    "oil_ghee":      "🫙",
+    "spices":        "🌶️",
+    "soap_cleaning": "🧼",
+    "tobacco":       "🚬",
+    "dairy_eggs":    "🥚",
+    "sweets":        "🍬",
+    "other":         "📦",
+}
+
+
+def ask_category_breakdown(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "📊 کیا آپ category-wise breakdown چاہتے ہیں؟ (ہاں / نہیں)"
+    if lang == "english":
+        return "📊 Want a category-wise breakdown of today's sales? (yes / no)"
+    return "📊 Category-wise breakdown chahiye? (haan / nahi)"
+
+
+def format_category_breakdown(rows: list[dict], day: date, lang: Lang = "roman_urdu") -> str:
+    if not rows:
+        if lang == "urdu":    return "آج کوئی product-wise sale ریکارڈ نہیں ملی۔"
+        if lang == "english": return "No product-level sales recorded today."
+        return "Aaj koi product-wise sale record nahi mili."
+
+    date_str = day.strftime("%d %b %Y")
+    if lang == "urdu":
+        lines = [f"📊 Category Breakdown — {date_str}", ""]
+    elif lang == "english":
+        lines = [f"📊 Category Breakdown — {date_str}", ""]
+    else:
+        lines = [f"📊 Category Breakdown — {date_str}", ""]
+
+    # Group rows by category
+    from collections import defaultdict
+    by_cat: dict[str, list] = defaultdict(list)
+    for r in rows:
+        by_cat[r["category"]].append(r)
+
+    grand_total = 0.0
+    for cat, items in by_cat.items():
+        emoji = _CATEGORY_EMOJI.get(cat, "📦")
+        if lang == "urdu":
+            cat_label = _CATEGORY_URDU.get(cat, cat)
+        elif lang == "english":
+            cat_label = cat.replace("_", " ").title()
+        else:
+            cat_label = _CATEGORY_ROMAN.get(cat, cat)
+        lines.append(f"{emoji} *{cat_label}*")
+        cat_total = 0.0
+        for item in items:
+            price = float(item["total_price"] or 0)
+            cat_total += price
+            name = item["product"].capitalize()
+            qty  = float(item["total_qty"] or 0)
+            unit = item["unit"] or ""
+            qty_str = f" {int(qty)}{' '+unit if unit else ''}" if qty else ""
+            lines.append(f"  • {name}{qty_str} — {_fmt_money(price)}")
+        grand_total += cat_total
+    lines.append("")
+    if lang == "urdu":
+        lines.append(f"*کل: {_fmt_money(grand_total)}*")
+    elif lang == "english":
+        lines.append(f"*Total: {_fmt_money(grand_total)}*")
+    else:
+        lines.append(f"*Kul: {_fmt_money(grand_total)}*")
+    return "\n".join(lines)
+
+
+# ============================================================
 # Low-confidence transaction confirmation
 # ============================================================
 

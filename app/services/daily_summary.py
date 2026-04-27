@@ -67,9 +67,12 @@ async def run_daily_summary_for_all() -> int:
     for r in rows:
         sk = dict(r)
         try:
+            lang = sk.get("language_pref") or "roman_urdu"
             text = await build_daily_summary_text(sk)
+            text = text + "\n\n" + replies.ask_category_breakdown(lang)
             try:
                 await whatsapp.send_text(sk["phone_number"], text)
+                await db.update_shopkeeper(str(sk["id"]), bot_state="awaiting_category_report")
                 sent += 1
             except Exception as e:  # noqa: BLE001
                 log.warning(

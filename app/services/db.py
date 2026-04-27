@@ -346,6 +346,38 @@ async def mark_reminder_sent(reminder_id: str) -> None:
         )
 
 
+async def get_category_breakdown(
+    shopkeeper_id: str, day: date, tz: str = "Asia/Karachi",
+) -> list[dict]:
+    """
+    Returns per-product totals grouped by category for a given local date.
+    Only includes transactions that have item-level data (items not null/empty).
+    """
+    async with conn() as c:
+        rows = await c.fetch(
+            """
+            SELECT
+                COALESCE(item->>'category', 'other')   AS category,
+                COALESCE(item->>'name',     'unknown') AS product,
+                COALESCE(SUM((item->>'price')::numeric), 0) AS total_price,
+                COALESCE(SUM((item->>'quantity')::numeric), 0) AS total_qty,
+                MAX(item->>'unit') AS unit
+            FROM transactions,
+                 jsonb_array_elements(items) AS item
+            WHERE shopkeeper_id = $1
+              AND is_deleted = FALSE
+              AND items IS NOT NULL
+              AND items != 'null'::jsonb
+              AND jsonb_array_length(items) > 0
+              AND (occurred_at AT TIME ZONE $2)::date = $3
+            GROUP BY category, product
+            ORDER BY category, total_price DESC
+            """,
+            shopkeeper_id, tz, day,
+        )
+    return [dict(r) for r in rows]
+
+
 async def count_voice_today(shopkeeper_id: str, tz: str = "Asia/Karachi") -> int:
     today = datetime.now(ZoneInfo(tz)).date()
     async with conn() as c:

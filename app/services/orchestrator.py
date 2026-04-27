@@ -62,6 +62,10 @@ async def handle_message(
         return replies.onboarding_done(shop_name, lang), None, None
 
     # ---- Pending multi-turn states ----------------------------------------
+    if shopkeeper.get("bot_state") == "awaiting_category_report":
+        result = await _handle_category_report(shopkeeper, text, lang)
+        if result is not None:   # None means "not a yes/no — fall through"
+            return result
     if shopkeeper.get("bot_state") == "awaiting_tx_confirm":
         return await _handle_tx_confirm(shopkeeper, text, lang)
     if shopkeeper.get("bot_state") == "awaiting_contact_confirm":
@@ -454,6 +458,36 @@ async def _handle_disambiguation(
     if ttype == TransactionType.SUPPLIER_PURCHASE:
         return replies.confirm_supplier_purchase(name, pending["amount"], balance, lang), None, txn_id
     return replies.generic_error(lang), None, txn_id
+
+
+async def _handle_category_report(
+    shopkeeper: dict, text: str, lang: str,
+) -> tuple[str, dict | None, str | None] | None:
+    """
+    Returns None if the message is not a yes/no reply, so the caller can
+    fall through to normal LLM processing (e.g. a morning transaction).
+    """
+    tokens = set(text.strip().lower().split())
+    yes = bool(tokens & {"haan", "han", "ha", "yes", "1", "bilkul", "theek", "ہاں", "chahiye"})
+    no  = bool(tokens & {"nahi", "nai", "no", "2", "nai", "نہیں", "mat", "nahin"})
+
+    if not yes and not no:
+        # Not a response — clear state and fall through to normal processing
+        await db.update_shopkeeper(str(shopkeeper["id"]), bot_state="idle")
+        return None
+
+    await db.update_shopkeeper(str(shopkeeper["id"]), bot_state="idle")
+
+    if no:
+        msg = "ٹھیک ہے! 👍" if lang == "urdu" else "OK! 👍" if lang == "english" else "Theek hai! 👍"
+        return msg, None, None
+
+    # Build category breakdown for today
+    sk_id = str(shopkeeper["id"])
+    tz = shopkeeper.get("timezone", "Asia/Karachi")
+    today = datetime.now(ZoneInfo(tz)).date()
+    rows = await db.get_category_breakdown(sk_id, today, tz)
+    return replies.format_category_breakdown(rows, today, lang), None, None
 
 
 async def _handle_tx_confirm(
