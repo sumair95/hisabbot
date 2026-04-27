@@ -53,11 +53,15 @@ def _fmt_items(items: list, lang: Lang) -> str:
         else:
             cat_label = _CATEGORY_ROMAN.get(cat, "") if cat else ""
 
+        price = it.get("price") if isinstance(it, dict) else getattr(it, "price", None)
+
         piece = name.capitalize()
         if qty and unit:
-            piece += f" {qty} {unit}"
+            piece += f" {int(qty) if qty == int(qty) else qty} {unit}"
         elif qty:
             piece += f" x{int(qty)}"
+        if price:
+            piece += f" — {_fmt_money(price)}"
         if cat_label:
             piece += f" ({cat_label})"
         parts.append(piece)

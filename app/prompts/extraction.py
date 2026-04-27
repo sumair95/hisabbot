@@ -47,7 +47,7 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "transaction_type": "sale_cash"|"sale_credit"|"payment_received"|"payment_made"|"supplier_purchase",
         "customer_name": "Ahmed" | null,
         "amount": 500,
-        "items": [{"name":"cheeni","quantity":2,"unit":"kg","category":"grains"}],
+        "items": [{"name":"cheeni","quantity":2,"unit":"kg","price":300,"category":"grains"}],
         "notes": null,
         "confidence": 0.92
       } | null,
@@ -84,6 +84,10 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
       in the shopkeeper's language. Still set intent to TRANSACTION or QUERY as best guess.
     - If you truly cannot parse, set intent=GREETING_OR_OTHER with a friendly
       clarification_question.
+    - For every item, set "price" to the total amount for that item line
+      (e.g. "2 biscuit pack 30 rs k" → price=30, quantity=2; if only one
+      item is mentioned and no per-item price given, price = transaction amount).
+      If multiple items are listed, split the total across them if amounts are stated.
     - For every item in a transaction, set "category" to one of:
         "grains"        — chawal, aata, daal, makai, gehun, soji, besan
         "drinks"        — coke, pepsi, juice, water, soft drink, doodh (packaged), lassi, energy drink
@@ -120,19 +124,27 @@ EXTRACTION_EXAMPLES = dedent("""
 
     Example 5
     User: "2 kg cheeni 300 ka, cash"
-    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":300,"items":[{"name":"cheeni","quantity":2,"unit":"kg","category":"spices"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":300,"items":[{"name":"cheeni","quantity":2,"unit":"kg","price":300,"category":"spices"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
     Example 5b
     User: "2000 ki chawal ki sale hoye"
-    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":2000,"items":[{"name":"chawal","quantity":null,"unit":null,"category":"grains"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":2000,"items":[{"name":"chawal","quantity":null,"unit":null,"price":2000,"category":"grains"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
     Example 5c
-    User: "450 ki coke ki bottle ki sale hoye"
-    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":450,"items":[{"name":"coke","quantity":1,"unit":"bottle","category":"drinks"}],"notes":null,"confidence":0.92},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+    User: "2 super biscuit k pack 30 rs k"
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":30,"items":[{"name":"super biscuit","quantity":2,"unit":"pack","price":30,"category":"snacks"}],"notes":null,"confidence":0.92},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
     Example 5d
+    User: "2 dabby rafhan custard k 250rs k"
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":250,"items":[{"name":"rafhan custard","quantity":2,"unit":"dabba","price":250,"category":"snacks"}],"notes":null,"confidence":0.92},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 5e
+    User: "450 ki coke ki bottle ki sale hoye"
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":450,"items":[{"name":"coke","quantity":1,"unit":"bottle","price":450,"category":"drinks"}],"notes":null,"confidence":0.92},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 5f
     User: "355 k andy biky"
-    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":355,"items":[{"name":"anda","quantity":null,"unit":null,"category":"dairy_eggs"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":355,"items":[{"name":"anda","quantity":null,"unit":null,"price":355,"category":"dairy_eggs"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
     Example 6
     User: "last wala galat tha"
