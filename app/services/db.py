@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from typing import Any
 import asyncpg
 
