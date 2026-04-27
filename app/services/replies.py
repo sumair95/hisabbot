@@ -11,6 +11,59 @@ from datetime import date
 Lang = str  # 'roman_urdu' | 'urdu' | 'english'
 
 
+_CATEGORY_ROMAN = {
+    "grains":        "Anaj",
+    "drinks":        "Drinks",
+    "snacks":        "Snacks",
+    "oil_ghee":      "Ghee/Oil",
+    "spices":        "Masalay",
+    "soap_cleaning": "Sabun/Safai",
+    "tobacco":       "Cigarette",
+    "dairy_eggs":    "Dairy/Anda",
+    "sweets":        "Mithai",
+    "other":         "Doosri Cheez",
+}
+_CATEGORY_URDU = {
+    "grains":        "اناج",
+    "drinks":        "مشروبات",
+    "snacks":        "اسنیکس",
+    "oil_ghee":      "گھی/تیل",
+    "spices":        "مسالے",
+    "soap_cleaning": "صابن/صفائی",
+    "tobacco":       "سگریٹ",
+    "dairy_eggs":    "ڈیری/انڈے",
+    "sweets":        "مٹھائی",
+    "other":         "دیگر",
+}
+
+
+def _fmt_items(items: list, lang: Lang) -> str:
+    """One-line summary of items for use in confirmations."""
+    if not items:
+        return ""
+    parts = []
+    for it in items[:3]:
+        name = it.get("name", "") if isinstance(it, dict) else getattr(it, "name", "")
+        cat  = it.get("category") if isinstance(it, dict) else getattr(it, "category", None)
+        qty  = it.get("quantity") if isinstance(it, dict) else getattr(it, "quantity", None)
+        unit = it.get("unit") if isinstance(it, dict) else getattr(it, "unit", None)
+
+        if lang == "urdu":
+            cat_label = _CATEGORY_URDU.get(cat, "") if cat else ""
+        else:
+            cat_label = _CATEGORY_ROMAN.get(cat, "") if cat else ""
+
+        piece = name.capitalize()
+        if qty and unit:
+            piece += f" {qty} {unit}"
+        elif qty:
+            piece += f" x{int(qty)}"
+        if cat_label:
+            piece += f" ({cat_label})"
+        parts.append(piece)
+    return ", ".join(parts)
+
+
 def _fmt_money(amount: float) -> str:
     if amount == int(amount):
         return f"PKR {int(amount):,}"
@@ -21,24 +74,26 @@ def _fmt_money(amount: float) -> str:
 # Transaction confirmations
 # ============================================================
 
-def confirm_sale_credit(name: str, amount: float, balance: float, lang: Lang = "roman_urdu") -> str:
+def confirm_sale_credit(name: str, amount: float, balance: float, lang: Lang = "roman_urdu", items: list | None = None) -> str:
     m = _fmt_money(amount)
     b = _fmt_money(balance)
+    item_line = f"\n📦 {_fmt_items(items, lang)}" if items else ""
     if lang == "urdu":
-        return f"✅ {name} کو {m} ادھار دیا۔\nکل ادھار {name} کا: {b}\n\nغلط ہے؟ 'undo' لکھیں۔"
+        return f"✅ {name} کو {m} ادھار دیا۔{item_line}\nکل ادھار {name} کا: {b}\n\nغلط ہے؟ 'undo' لکھیں۔"
     if lang == "english":
-        return f"✅ Credit sale to {name}: {m}. Total owed by {name}: {b}\n\nWrong? Reply 'undo'."
-    return f"✅ {name} ko {m} udhaar. Kul udhaar {name} ka: {b}\n\nGhalat hai? 'undo' likhein."
+        return f"✅ Credit sale to {name}: {m}.{item_line}\nTotal owed by {name}: {b}\n\nWrong? Reply 'undo'."
+    return f"✅ {name} ko {m} udhaar.{item_line}\nKul udhaar {name} ka: {b}\n\nGhalat hai? 'undo' likhein."
 
 
-def confirm_sale_cash(amount: float, today_total: float, lang: Lang = "roman_urdu") -> str:
+def confirm_sale_cash(amount: float, today_total: float, lang: Lang = "roman_urdu", items: list | None = None) -> str:
     m = _fmt_money(amount)
     t = _fmt_money(today_total)
+    item_line = f"\n📦 {_fmt_items(items, lang)}" if items else ""
     if lang == "urdu":
-        return f"✅ {m} نقد فروخت لکھ دی۔\nآج کی نقد فروخت: {t}\n\nغلط ہے؟ 'undo' لکھیں۔"
+        return f"✅ {m} نقد فروخت لکھ دی۔{item_line}\nآج کی نقد فروخت: {t}\n\nغلط ہے؟ 'undo' لکھیں۔"
     if lang == "english":
-        return f"✅ Cash sale {m}. Today's cash total: {t}\n\nWrong? Reply 'undo'."
-    return f"✅ Cash sale {m} likh di. Aaj ki cash sales: {t}\n\nGhalat hai? 'undo' likhein."
+        return f"✅ Cash sale {m}.{item_line}\nToday's cash total: {t}\n\nWrong? Reply 'undo'."
+    return f"✅ Cash sale {m} likh di.{item_line}\nAaj ki cash sales: {t}\n\nGhalat hai? 'undo' likhein."
 
 
 def confirm_payment_received(name: str, amount: float, balance: float, lang: Lang = "roman_urdu") -> str:

@@ -47,7 +47,7 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "transaction_type": "sale_cash"|"sale_credit"|"payment_received"|"payment_made"|"supplier_purchase",
         "customer_name": "Ahmed" | null,
         "amount": 500,
-        "items": [{"name":"cheeni","quantity":2,"unit":"kg"}],
+        "items": [{"name":"cheeni","quantity":2,"unit":"kg","category":"grains"}],
         "notes": null,
         "confidence": 0.92
       } | null,
@@ -84,6 +84,18 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
       in the shopkeeper's language. Still set intent to TRANSACTION or QUERY as best guess.
     - If you truly cannot parse, set intent=GREETING_OR_OTHER with a friendly
       clarification_question.
+    - For every item in a transaction, set "category" to one of:
+        "grains"        — chawal, aata, daal, makai, gehun, soji, besan
+        "drinks"        — coke, pepsi, juice, water, soft drink, doodh (packaged), lassi, energy drink
+        "snacks"        — chips, biscuits, toffee, namkeen, chocolate, cake rusk, wafer
+        "oil_ghee"      — ghee, cooking oil, vanaspati, tel
+        "spices"        — namak, mirch, haldi, zeera, garam masala, dhaniya
+        "soap_cleaning" — soap, shampoo, washing powder, dishwash, surf, lifebuoy
+        "tobacco"       — cigarette, pan, gutka, beedi, naswar
+        "dairy_eggs"    — anda, dahi, makhan, paneer, fresh doodh, cream
+        "sweets"        — mithai, gulab jamun, barfi, halwa, gur, shakkar
+        "other"         — anything that does not fit above
+    - If only an amount is mentioned with no product, leave items as [].
     - Never invent customer names or amounts.
     - Output ONLY the JSON object. No ```json fences, no explanation.
 """).strip()
@@ -108,7 +120,19 @@ EXTRACTION_EXAMPLES = dedent("""
 
     Example 5
     User: "2 kg cheeni 300 ka, cash"
-    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":300,"items":[{"name":"cheeni","quantity":2,"unit":"kg"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":300,"items":[{"name":"cheeni","quantity":2,"unit":"kg","category":"spices"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 5b
+    User: "2000 ki chawal ki sale hoye"
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":2000,"items":[{"name":"chawal","quantity":null,"unit":null,"category":"grains"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 5c
+    User: "450 ki coke ki bottle ki sale hoye"
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":450,"items":[{"name":"coke","quantity":1,"unit":"bottle","category":"drinks"}],"notes":null,"confidence":0.92},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 5d
+    User: "355 k andy biky"
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"sale_cash","customer_name":null,"amount":355,"items":[{"name":"anda","quantity":null,"unit":null,"category":"dairy_eggs"}],"notes":null,"confidence":0.9},"query":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
     Example 6
     User: "last wala galat tha"

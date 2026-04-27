@@ -255,7 +255,8 @@ async def _handle_transaction(
     if ttype == TransactionType.SALE_CASH:
         today = date.today()
         agg = await db.compute_daily_aggregates(sk_id, today, shopkeeper.get("timezone", "Asia/Karachi"))
-        return replies.confirm_sale_cash(txn.amount, agg["cash_sales"], lang), txn_id
+        raw_items = [i.model_dump() for i in txn.items] if txn.items else None
+        return replies.confirm_sale_cash(txn.amount, agg["cash_sales"], lang, items=raw_items), txn_id
 
     # All other types have a contact
     assert contact is not None
@@ -269,7 +270,8 @@ async def _handle_transaction(
 
     name = contact["name"]
     if ttype == TransactionType.SALE_CREDIT:
-        return replies.confirm_sale_credit(name, txn.amount, balance, lang), txn_id
+        raw_items = [i.model_dump() for i in txn.items] if txn.items else None
+        return replies.confirm_sale_credit(name, txn.amount, balance, lang, items=raw_items), txn_id
     if ttype == TransactionType.PAYMENT_RECEIVED:
         return replies.confirm_payment_received(name, txn.amount, balance, lang), txn_id
     if ttype == TransactionType.PAYMENT_MADE:

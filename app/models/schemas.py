@@ -39,6 +39,7 @@ class ItemLine(BaseModel):
     name: str
     quantity: float | None = None
     unit: str | None = None  # 'kg', 'packet', 'piece', etc.
+    category: str | None = None  # grains|drinks|snacks|oil_ghee|spices|soap_cleaning|tobacco|dairy_eggs|sweets|other
 
 
 class ExtractedTransaction(BaseModel):
