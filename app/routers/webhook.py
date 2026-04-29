@@ -169,6 +169,8 @@ async def _process_one_message(msg: dict, value: dict) -> None:
     if shopkeeper is None:
         shopkeeper = await db.get_or_create_shopkeeper(phone_number)
 
+    sk_id = str(shopkeeper["id"])
+
     if not text_content:
         return
 
