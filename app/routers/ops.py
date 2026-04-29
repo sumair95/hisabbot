@@ -41,6 +41,18 @@ async def trigger_daily_summary(
     return {"sent": sent}
 
 
+@router.get("/admin/failed-messages")
+async def list_failed_messages(
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+):
+    """List unresolved failed messages so they can be manually recovered."""
+    settings = get_settings()
+    if x_admin_token != settings.whatsapp_webhook_verify_token:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    rows = await db.get_failed_messages(resolved=False)
+    return {"count": len(rows), "messages": rows}
+
+
 @router.get("/admin/shop/{phone}/summary")
 async def get_shop_summary(
     phone: str,

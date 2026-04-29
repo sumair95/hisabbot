@@ -73,14 +73,22 @@ async def receive_webhook(
         for entry in entries:
             for change in entry.get("changes", []):
                 value = change.get("value", {})
-                # Ignore status callbacks (sent/delivered/read)
                 if "messages" not in value:
                     continue
                 for msg in value["messages"]:
-                    await _process_one_message(msg, value)
+                    try:
+                        await _process_one_message(msg, value)
+                    except Exception as e:  # noqa: BLE001
+                        log.exception("webhook.handler_error", error=str(e))
+                        # Save to dead-letter table so the message is never lost
+                        await db.save_failed_message(
+                            wa_message_id=msg.get("id"),
+                            phone_number=msg.get("from"),
+                            raw_payload=msg,
+                            error_message=str(e),
+                        )
     except Exception as e:  # noqa: BLE001
-        log.exception("webhook.handler_error", error=str(e))
-        # Still return 200 so Meta doesn't hammer us with retries.
+        log.exception("webhook.outer_error", error=str(e))
     return JSONResponse(content={"ok": True})
 
 

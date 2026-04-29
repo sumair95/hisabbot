@@ -346,6 +346,46 @@ async def mark_reminder_sent(reminder_id: str) -> None:
         )
 
 
+async def save_failed_message(
+    wa_message_id: str | None,
+    phone_number: str | None,
+    raw_payload: dict,
+    error_message: str,
+) -> None:
+    try:
+        async with conn() as c:
+            await c.execute(
+                """
+                INSERT INTO failed_messages
+                  (wa_message_id, phone_number, raw_payload, error_message)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT DO NOTHING
+                """,
+                wa_message_id, phone_number,
+                json.dumps(raw_payload), error_message,
+            )
+        log.info("failed_message.saved", wa_id=wa_message_id, phone=phone_number)
+    except Exception as e:  # noqa: BLE001
+        log.error("failed_message.save_error", error=str(e))
+
+
+async def get_failed_messages(resolved: bool = False) -> list[dict]:
+    async with conn() as c:
+        rows = await c.fetch(
+            "SELECT * FROM failed_messages WHERE is_resolved = $1 ORDER BY created_at DESC",
+            resolved,
+        )
+    return [dict(r) for r in rows]
+
+
+async def mark_failed_message_resolved(failed_id: str) -> None:
+    async with conn() as c:
+        await c.execute(
+            "UPDATE failed_messages SET is_resolved = TRUE, resolved_at = NOW() WHERE id = $1",
+            failed_id,
+        )
+
+
 async def get_category_breakdown(
     shopkeeper_id: str, day: date, tz: str = "Asia/Karachi",
 ) -> list[dict]:
