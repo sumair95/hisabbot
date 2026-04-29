@@ -623,6 +623,22 @@ def ask_tx_confirm(description: str, lang: Lang = "roman_urdu") -> str:
     return f"Maine likha:\n*{description}*\n\nSahi hai? (haan / nahi)"
 
 
+def correction_applied(description: str, lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return f"✅ ٹھیک کر دیا:\n{description}\n\nغلط ہے؟ 'undo' لکھیں۔"
+    if lang == "english":
+        return f"✅ Corrected:\n{description}\n\nWrong? Reply 'undo'."
+    return f"✅ Theek kar diya:\n{description}\n\nGhalat hai? 'undo' likhein."
+
+
+def correction_not_found(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "کوئی پچھلی اندراج نہیں ملی جسے ٹھیک کیا جا سکے۔"
+    if lang == "english":
+        return "No recent entry found to correct."
+    return "Koi pichli entry nahi mili jisay theek kar sakein."
+
+
 def tx_confirm_cancelled(lang: Lang = "roman_urdu") -> str:
     if lang == "urdu":
         return "ٹھیک ہے، یہ اندراج منسوخ کر دیا۔ دوبارہ واضح طور پر بھیجیں۔"

@@ -112,11 +112,13 @@ async def handle_message(
         return reply, extraction_json, None
 
     if extraction.intent == Intent.CORRECTION:
-        removed = await db.soft_delete_last_transaction(str(shopkeeper["id"]))
-        return (
-            replies.undo_success(lang) if removed else replies.undo_nothing(lang),
-            extraction_json, None,
-        )
+        corr = extraction.correction
+        if corr and corr.correction_type != "undo_last":
+            reply = await _handle_field_correction(shopkeeper, extraction, lang)
+        else:
+            removed = await db.soft_delete_last_transaction(str(shopkeeper["id"]))
+            reply = replies.undo_success(lang) if removed else replies.undo_nothing(lang)
+        return reply, extraction_json, None
 
     # Greeting / other
     if extraction.clarification_question:
@@ -534,6 +536,63 @@ async def _handle_tx_confirm(
         source=pending.get("source", "text"),
     )
     return reply, pending["extraction"], txn_id
+
+
+async def _handle_field_correction(
+    shopkeeper: dict, extraction: ExtractionResult, lang: str,
+) -> str:
+    corr = extraction.correction
+    assert corr is not None
+    sk_id = str(shopkeeper["id"])
+
+    last = await db.get_last_transaction(sk_id)
+    if not last:
+        return replies.correction_not_found(lang)
+
+    txn_id = str(last["id"])
+
+    if corr.correction_type == "fix_item" and corr.new_item_name:
+        # Replace the first item's name in the items JSONB array
+        items = last.get("items") or []
+        if isinstance(items, str):
+            items = json.loads(items)
+        if not items:
+            return replies.correction_not_found(lang)
+        old_name = items[0].get("name", "")
+        items[0]["name"] = corr.new_item_name
+        await db.update_transaction(txn_id, items=json.dumps(items))
+        desc = (
+            f"{old_name} → {corr.new_item_name}"
+            if lang == "english"
+            else f"{old_name} → {corr.new_item_name}"
+        )
+        return replies.correction_applied(desc, lang)
+
+    if corr.correction_type == "fix_amount" and corr.new_amount is not None:
+        old_amount = float(last.get("amount", 0))
+        await db.update_transaction(txn_id, amount=corr.new_amount)
+        desc = (
+            f"PKR {int(old_amount):,} → PKR {int(corr.new_amount):,}"
+        )
+        return replies.correction_applied(desc, lang)
+
+    if corr.correction_type == "fix_customer" and corr.new_customer_name:
+        contact_type = (
+            "supplier" if last.get("type") in {"payment_made", "supplier_purchase"}
+            else "customer"
+        )
+        try:
+            contact = await resolve_contact(sk_id, corr.new_customer_name, contact_type)
+            mark_confirmed(sk_id, str(contact["id"]))
+        except (UnconfirmedContact, AmbiguousContact):
+            contact = await db.create_contact(sk_id, corr.new_customer_name, contact_type)
+        await db.update_transaction(txn_id, contact_id=str(contact["id"]))
+        desc = corr.new_customer_name
+        return replies.correction_applied(desc, lang)
+
+    # fallback — undo
+    removed = await db.soft_delete_last_transaction(sk_id)
+    return replies.undo_success(lang) if removed else replies.undo_nothing(lang)
 
 
 async def _handle_reminder(

@@ -208,6 +208,35 @@ async def insert_transaction(
     return dict(row)
 
 
+async def get_last_transaction(shopkeeper_id: str) -> dict[str, Any] | None:
+    """Return the most recent non-deleted transaction for a shopkeeper."""
+    async with conn() as c:
+        row = await c.fetchrow(
+            """
+            SELECT * FROM transactions
+             WHERE shopkeeper_id = $1 AND is_deleted = FALSE
+             ORDER BY created_at DESC
+             LIMIT 1
+            """,
+            shopkeeper_id,
+        )
+    return dict(row) if row else None
+
+
+async def update_transaction(txn_id: str, **fields) -> dict[str, Any] | None:
+    """Update arbitrary columns on a transaction row."""
+    if not fields:
+        return None
+    sets = ", ".join(f"{k} = ${i+2}" for i, k in enumerate(fields.keys()))
+    async with conn() as c:
+        row = await c.fetchrow(
+            f"UPDATE transactions SET {sets} WHERE id = $1 RETURNING *",
+            txn_id,
+            *fields.values(),
+        )
+    return dict(row) if row else None
+
+
 async def soft_delete_last_transaction(
     shopkeeper_id: str, reason: str = "user_undo",
 ) -> dict | None:

@@ -65,12 +65,20 @@ class ExtractedReminder(BaseModel):
     remind_date: str | None = None  # "tomorrow", "YYYY-MM-DD", or null → defaults to tomorrow
 
 
+class ExtractedCorrection(BaseModel):
+    correction_type: Literal["undo_last", "fix_item", "fix_amount", "fix_customer"]
+    new_item_name: str | None = None   # for fix_item
+    new_amount: float | None = None    # for fix_amount
+    new_customer_name: str | None = None  # for fix_customer
+
+
 class ExtractionResult(BaseModel):
     """Top-level output from the extraction LLM call."""
     intent: Intent
     transaction: ExtractedTransaction | None = None
     query: ExtractedQuery | None = None
     reminder: ExtractedReminder | None = None
+    correction: ExtractedCorrection | None = None
     correction_hint: str | None = None
     language_detected: Literal["urdu", "roman_urdu", "english", "mixed"] = "roman_urdu"
     needs_clarification: bool = False

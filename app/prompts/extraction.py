@@ -62,6 +62,12 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "amount": 500 | null,
         "remind_date": "tomorrow" | "YYYY-MM-DD" | null
       } | null,
+      "correction": {
+        "correction_type": "undo_last"|"fix_item"|"fix_amount"|"fix_customer",
+        "new_item_name": "soft drink" | null,
+        "new_amount": 300 | null,
+        "new_customer_name": "Ali" | null
+      } | null,
       "correction_hint": "last entry galat thi" | null,
       "language_detected": "urdu"|"roman_urdu"|"english"|"mixed",
       "needs_clarification": false,
@@ -173,6 +179,18 @@ EXTRACTION_EXAMPLES = dedent("""
     Example 12 (reminder — no date)
     User: "supplier ko maal ka paisa dena yaad rakhna"
     {"intent":"REMINDER","transaction":null,"query":null,"reminder":{"description":"supplier ko maal ka paisa dena hai","person_name":"supplier","amount":null,"remind_date":null},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 13 (field correction — fix item name)
+    User: "pichli transaction mein pani nae soft drink sale hoye"
+    {"intent":"CORRECTION","transaction":null,"query":null,"reminder":null,"correction":{"correction_type":"fix_item","new_item_name":"soft drink","new_amount":null,"new_customer_name":null},"correction_hint":"pichli transaction mein pani nae soft drink sale hoye","language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 14 (field correction — fix amount)
+    User: "pichli entry mein amount galat tha, 500 nahi 300 tha"
+    {"intent":"CORRECTION","transaction":null,"query":null,"reminder":null,"correction":{"correction_type":"fix_amount","new_item_name":null,"new_amount":300,"new_customer_name":null},"correction_hint":"pichli entry mein amount galat tha","language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 15 (field correction — fix customer name)
+    User: "Ahmed nae nae Ali ne paise diye the"
+    {"intent":"CORRECTION","transaction":null,"query":null,"reminder":null,"correction":{"correction_type":"fix_customer","new_item_name":null,"new_amount":null,"new_customer_name":"Ali"},"correction_hint":"Ahmed nae nae Ali ne paise diye the","language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 """).strip()
 
 
