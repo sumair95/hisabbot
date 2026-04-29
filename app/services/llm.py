@@ -36,7 +36,7 @@ def _openai_client() -> AsyncOpenAI:
 
 
 def _build_user_prompt(text: str, is_voice: bool) -> str:
-    parts = [EXTRACTION_EXAMPLES, ""]
+    parts = []
     if is_voice:
         parts.append(f"Note: {VOICE_TRANSCRIPT_HINT}")
         parts.append("")
@@ -47,12 +47,19 @@ def _build_user_prompt(text: str, is_voice: bool) -> str:
 async def _extract_anthropic(text: str, is_voice: bool) -> dict[str, Any]:
     settings = get_settings()
     client = _anthropic_client()
+    # Cache the large static system prompt + examples (5-min TTL on Anthropic's side).
+    # Cuts latency and cost on repeated calls — the cache hit saves ~200-400ms.
     resp = await client.messages.create(
         model=settings.anthropic_model,
         max_tokens=800,
         temperature=0.0,
-        system=EXTRACTION_SYSTEM_PROMPT,
+        system=[{
+            "type": "text",
+            "text": EXTRACTION_SYSTEM_PROMPT + "\n\n" + EXTRACTION_EXAMPLES,
+            "cache_control": {"type": "ephemeral"},
+        }],
         messages=[{"role": "user", "content": _build_user_prompt(text, is_voice)}],
+        extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
     )
     raw = "".join(b.text for b in resp.content if hasattr(b, "text"))
     return _parse_json_lenient(raw)

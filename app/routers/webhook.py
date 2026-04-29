@@ -5,6 +5,7 @@ GET  /webhook/whatsapp  — Meta's verification challenge during setup
 POST /webhook/whatsapp  — inbound messages (and status callbacks, which we ignore)
 """
 from __future__ import annotations
+import asyncio
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, JSONResponse
 
@@ -91,21 +92,26 @@ async def _process_one_message(msg: dict, value: dict) -> None:
         return
     phone_number = "+" + from_ if not from_.startswith("+") else from_
 
-    # Idempotency: Meta may retry.
-    if wa_id and await db.was_wa_message_processed(wa_id):
-        log.info("webhook.duplicate", wa_id=wa_id)
-        return
-
-    shopkeeper = await db.get_or_create_shopkeeper(phone_number)
-    sk_id = str(shopkeeper["id"])
+    # Fire-and-forget: mark as read immediately so user sees blue ticks
+    if wa_id:
+        asyncio.create_task(whatsapp.mark_read(wa_id))
 
     msg_type = msg.get("type")
     text_content: str | None = None
     transcript: str | None = None
     kind = "text"
     media_url = None
+    shopkeeper: dict | None = None
 
     if msg_type == "text":
+        # Parallel: idempotency check + shopkeeper fetch
+        already_processed, shopkeeper = await asyncio.gather(
+            db.was_wa_message_processed(wa_id),
+            db.get_or_create_shopkeeper(phone_number),
+        )
+        if already_processed:
+            log.info("webhook.duplicate", wa_id=wa_id)
+            return
         text_content = (msg.get("text") or {}).get("body", "").strip()
 
     elif msg_type in ("audio", "voice"):
@@ -115,31 +121,43 @@ async def _process_one_message(msg: dict, value: dict) -> None:
         if not media_id:
             return
         try:
-            audio_bytes, mime = await whatsapp.fetch_media(media_id)
+            # Parallel: DB calls + media download happen simultaneously
+            (already_processed, shopkeeper), (audio_bytes, mime) = await asyncio.gather(
+                asyncio.gather(
+                    db.was_wa_message_processed(wa_id),
+                    db.get_or_create_shopkeeper(phone_number),
+                ),
+                whatsapp.fetch_media(media_id),
+            )
+            if already_processed:
+                log.info("webhook.duplicate", wa_id=wa_id)
+                return
             ext = "ogg" if "ogg" in mime else "mp3"
             transcript = await stt.transcribe(audio_bytes, filename=f"voice.{ext}")
             text_content = transcript
         except Exception as e:  # noqa: BLE001
             log.error("webhook.voice_failed", error=str(e))
+            if shopkeeper is None:
+                shopkeeper = await db.get_or_create_shopkeeper(phone_number)
             await whatsapp.send_text(
                 phone_number,
                 "Voice note samajh nahi aayi. Dobara bhejein ya text likh dein.",
             )
             await db.log_message(
-                shopkeeper_id=sk_id, wa_message_id=wa_id,
+                shopkeeper_id=str(shopkeeper["id"]), wa_message_id=wa_id,
                 direction="inbound", kind="voice",
                 content=None, transcript=None, intent="ERROR",
             )
             return
 
     elif msg_type == "image":
-        # MVP: politely decline
+        shopkeeper = await db.get_or_create_shopkeeper(phone_number)
         await whatsapp.send_text(
             phone_number,
             "Abhi image support nahi hai — text ya voice note bhejein.",
         )
         await db.log_message(
-            shopkeeper_id=sk_id, wa_message_id=wa_id,
+            shopkeeper_id=str(shopkeeper["id"]), wa_message_id=wa_id,
             direction="inbound", kind="image",
         )
         return
@@ -147,6 +165,9 @@ async def _process_one_message(msg: dict, value: dict) -> None:
     else:
         log.info("webhook.unsupported_type", type=msg_type)
         return
+
+    if shopkeeper is None:
+        shopkeeper = await db.get_or_create_shopkeeper(phone_number)
 
     if not text_content:
         return

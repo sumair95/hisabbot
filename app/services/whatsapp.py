@@ -103,6 +103,26 @@ async def send_template(
         return r.json()
 
 
+# ----- outbound: mark message as read -----------------------
+
+async def mark_read(wa_message_id: str) -> None:
+    """Send read receipt so user sees blue ticks immediately."""
+    settings = get_settings()
+    if not settings.whatsapp_access_token or not settings.whatsapp_phone_number_id:
+        return
+    url = f"{GRAPH_BASE}/{settings.whatsapp_phone_number_id}/messages"
+    payload = {
+        "messaging_product": "whatsapp",
+        "status": "read",
+        "message_id": wa_message_id,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(url, headers=_headers(), json=payload)
+    except Exception:
+        pass  # never block message processing for this
+
+
 # ----- outbound: send audio (voice reply) --------------------
 
 async def upload_media(audio_bytes: bytes, mime_type: str = "audio/mpeg") -> str:
