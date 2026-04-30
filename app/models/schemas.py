@@ -66,7 +66,7 @@ class ExtractedReminder(BaseModel):
 
 
 class ExtractedCorrection(BaseModel):
-    correction_type: Literal["undo_last", "fix_item", "fix_amount", "fix_customer"]
+    correction_type: Literal["undo_last", "fix_item", "fix_amount", "fix_customer", "clear_all_udhaar"]
     new_item_name: str | None = None   # for fix_item
     new_amount: float | None = None    # for fix_amount
     new_customer_name: str | None = None  # for fix_customer

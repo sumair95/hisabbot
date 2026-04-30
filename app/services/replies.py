@@ -623,6 +623,43 @@ def ask_tx_confirm(description: str, lang: Lang = "roman_urdu") -> str:
     return f"Maine likha:\n*{description}*\n\nSahi hai? (haan / nahi)"
 
 
+def ask_bulk_clear_confirm(count: int, total: float, lang: Lang = "roman_urdu") -> str:
+    t = _fmt_money(total)
+    if lang == "urdu":
+        return (
+            f"⚠️ آپ *{count}* کسٹمرز کا پورا ادھار ({t}) صاف کرنا چاہتے ہیں؟\n"
+            "یہ ناقابلِ واپسی ہے — ہر کسٹمر کی payment received لکھی جائے گی۔\n\n"
+            "پکا ہے؟ (ہاں / نہیں)"
+        )
+    if lang == "english":
+        return (
+            f"⚠️ You're about to clear ALL udhaar for *{count}* customers ({t}).\n"
+            "A payment_received entry will be added for each. This cannot be undone easily.\n\n"
+            "Are you sure? (yes / no)"
+        )
+    return (
+        f"⚠️ Aap *{count}* customers ka poora udhaar ({t}) clear karna chahte hain?\n"
+        "Har customer ki payment received likh di jayegi.\n\n"
+        "Pakka hai? (haan / nahi)"
+    )
+
+
+def bulk_clear_done(count: int, lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return f"✅ {count} کسٹمرز کا ادھار صاف کر دیا۔ سب کا حساب zero ہو گیا۔"
+    if lang == "english":
+        return f"✅ Cleared udhaar for {count} customers. All balances are now zero."
+    return f"✅ {count} customers ka udhaar clear kar diya. Sab ka balance zero ho gaya."
+
+
+def no_udhaar_to_clear(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "ابھی کسی کا ادھار باقی نہیں — سب صاف ہے۔ ✅"
+    if lang == "english":
+        return "No outstanding udhaar to clear — all balances are zero. ✅"
+    return "Abhi kisi ka udhaar baqi nahi — sab clear hai. ✅"
+
+
 def correction_applied(description: str, lang: Lang = "roman_urdu") -> str:
     if lang == "urdu":
         return f"✅ ٹھیک کر دیا:\n{description}\n\nغلط ہے؟ 'undo' لکھیں۔"

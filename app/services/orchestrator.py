@@ -62,6 +62,8 @@ async def handle_message(
         return replies.onboarding_done(shop_name, lang), None, None
 
     # ---- Pending multi-turn states ----------------------------------------
+    if shopkeeper.get("bot_state") == "awaiting_bulk_clear_confirm":
+        return await _handle_bulk_clear_confirm(shopkeeper, text, lang)
     if shopkeeper.get("bot_state") == "awaiting_category_report":
         result = await _handle_category_report(shopkeeper, text, lang)
         if result is not None:   # None means "not a yes/no — fall through"
@@ -590,9 +592,53 @@ async def _handle_field_correction(
         desc = corr.new_customer_name
         return replies.correction_applied(desc, lang)
 
+    if corr.correction_type == "clear_all_udhaar":
+        customers = await db.get_customers_with_positive_balance(sk_id)
+        if not customers:
+            return replies.no_udhaar_to_clear(lang)
+        total = sum(float(c["balance"]) for c in customers)
+        pending = {
+            "mode": "bulk_clear",
+            "customers": [
+                {"contact_id": str(c["contact_id"]), "name": c["name"], "balance": float(c["balance"])}
+                for c in customers
+            ],
+        }
+        await db.update_shopkeeper(sk_id, bot_state="awaiting_bulk_clear_confirm", pending_tx=json.dumps(pending))
+        return replies.ask_bulk_clear_confirm(len(customers), total, lang)
+
     # fallback — undo
     removed = await db.soft_delete_last_transaction(sk_id)
     return replies.undo_success(lang) if removed else replies.undo_nothing(lang)
+
+
+async def _handle_bulk_clear_confirm(
+    shopkeeper: dict, text: str, lang: str,
+) -> tuple[str, dict | None, str | None]:
+    sk_id = str(shopkeeper["id"])
+    raw_pending = shopkeeper.get("pending_tx")
+    if not raw_pending:
+        await db.update_shopkeeper(sk_id, bot_state="idle")
+        return replies.generic_error(lang), None, None
+
+    pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
+    tokens = set(text.strip().lower().split())
+    yes = bool(tokens & {"1", "haan", "han", "ha", "yes", "bilkul", "theek", "ہاں", "pakka"})
+    no  = bool(tokens & {"2", "nahi", "nai", "no", "cancel", "band", "نہیں"})
+
+    if not yes and not no:
+        customers = pending.get("customers", [])
+        total = sum(c["balance"] for c in customers)
+        return replies.ask_bulk_clear_confirm(len(customers), total, lang), None, None
+
+    await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+
+    if no:
+        return replies.tx_confirm_cancelled(lang), None, None
+
+    customers = pending.get("customers", [])
+    count = await db.bulk_record_payments_received(sk_id, customers)
+    return replies.bulk_clear_done(count, lang), None, None
 
 
 async def _handle_reminder(

@@ -63,7 +63,7 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "remind_date": "tomorrow" | "YYYY-MM-DD" | null
       } | null,
       "correction": {
-        "correction_type": "undo_last"|"fix_item"|"fix_amount"|"fix_customer",
+        "correction_type": "undo_last"|"fix_item"|"fix_amount"|"fix_customer"|"clear_all_udhaar",
         "new_item_name": "soft drink" | null,
         "new_amount": 300 | null,
         "new_customer_name": "Ali" | null
@@ -106,6 +106,11 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "sweets"        — mithai, gulab jamun, barfi, halwa, gur, shakkar
         "other"         — anything that does not fit above
     - If only an amount is mentioned with no product, leave items as [].
+    - "sary udhaar hata do / sab ka udhaar clear karo / sab ny paisy dy diye / clear all udhaar"
+      = CORRECTION with correction_type "clear_all_udhaar". No transaction or query needed.
+    - If a message mentions both a paid amount AND a remaining amount (e.g. "500 mein se 300
+      diye, 200 abhi baqi hai"), extract ONLY the paid amount as payment_received. The remaining
+      balance is auto-calculated — never set needs_clarification for partial payment messages.
     - Never invent customer names or amounts.
     - Output ONLY the JSON object. No ```json fences, no explanation.
 """).strip()
@@ -191,6 +196,14 @@ EXTRACTION_EXAMPLES = dedent("""
     Example 15 (field correction — fix customer name)
     User: "Ahmed nae nae Ali ne paise diye the"
     {"intent":"CORRECTION","transaction":null,"query":null,"reminder":null,"correction":{"correction_type":"fix_customer","new_item_name":null,"new_amount":null,"new_customer_name":"Ali"},"correction_hint":"Ahmed nae nae Ali ne paise diye the","language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 16 (bulk udhaar clear)
+    User: "pichly sary udhar hata do, sb ny paisy dy diye hain"
+    {"intent":"CORRECTION","transaction":null,"query":null,"reminder":null,"correction":{"correction_type":"clear_all_udhaar","new_item_name":null,"new_amount":null,"new_customer_name":null},"correction_hint":"sb ny paisy dy diye hain","language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 17 (partial payment — extract only paid amount)
+    User: "Ahmed ne 500 mein se 300 diye, 200 abhi bhi baqi hai"
+    {"intent":"TRANSACTION","transaction":{"transaction_type":"payment_received","customer_name":"Ahmed","amount":300,"items":[],"notes":"200 baqi","confidence":0.95},"query":null,"reminder":null,"correction":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 """).strip()
 
 

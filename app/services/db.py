@@ -208,6 +208,39 @@ async def insert_transaction(
     return dict(row)
 
 
+async def get_customers_with_positive_balance(shopkeeper_id: str) -> list[dict]:
+    """Return all customers who still owe money (balance > 0)."""
+    async with conn() as c:
+        rows = await c.fetch(
+            """
+            SELECT * FROM v_contact_balances
+             WHERE shopkeeper_id = $1 AND type = 'customer' AND balance > 0
+             ORDER BY balance DESC
+            """,
+            shopkeeper_id,
+        )
+    return [dict(r) for r in rows]
+
+
+async def bulk_record_payments_received(
+    shopkeeper_id: str, customers: list[dict],
+) -> int:
+    """Insert a payment_received transaction for each customer to zero their balance."""
+    count = 0
+    for cust in customers:
+        balance = float(cust["balance"])
+        if balance > 0:
+            await insert_transaction(
+                shopkeeper_id=shopkeeper_id,
+                contact_id=str(cust["contact_id"]),
+                type_="payment_received",
+                amount=balance,
+                notes="bulk_clear",
+            )
+            count += 1
+    return count
+
+
 async def get_last_transaction(shopkeeper_id: str) -> dict[str, Any] | None:
     """Return the most recent non-deleted transaction for a shopkeeper."""
     async with conn() as c:
