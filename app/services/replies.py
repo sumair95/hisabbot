@@ -120,15 +120,27 @@ def confirm_payment_made(name: str, amount: float, balance: float, lang: Lang = 
     m = _fmt_money(amount)
     b = _fmt_money(abs(balance))
     if lang == "urdu":
-        tail = f"آپ کو {name} کو ابھی {b} اور دینے ہیں۔" if balance < 0 else f"{name} کا حساب صاف۔"
+        if balance < 0:
+            tail = f"ابھی باقی: {name} کو {b} اور دینے ہیں۔"
+        elif balance == 0:
+            tail = f"{name} کا حساب صاف ہو گیا۔"
+        else:
+            tail = f"Supplier payment record ہو گئی۔"  # balance > 0: no prior purchase on record
         return f"✅ {name} کو {m} دیے۔\n{tail}\n\nغلط ہے؟ 'undo' لکھیں۔"
     if lang == "english":
-        tail = f"You still owe {name} {b}." if balance < 0 else "Balance clear."
+        if balance < 0:
+            tail = f"Still owe {name}: {b}."
+        elif balance == 0:
+            tail = f"{name}'s balance is now clear."
+        else:
+            tail = "Supplier payment recorded."
         return f"✅ Paid {m} to {name}. {tail}\n\nWrong? Reply 'undo'."
-    tail = (
-        f"Aap ko {name} ko abhi aur {b} dene hain." if balance < 0
-        else f"{name} ka hisaab clear."
-    )
+    if balance < 0:
+        tail = f"Abhi baqi: {name} ko {b} aur dene hain."
+    elif balance == 0:
+        tail = f"{name} ka hisaab clear ho gaya."
+    else:
+        tail = "Supplier payment record ho gayi."
     return f"✅ {name} ko {m} diye. {tail}\n\nGhalat hai? 'undo' likhein."
 
 
@@ -536,21 +548,21 @@ def ask_category_breakdown(lang: Lang = "roman_urdu") -> str:
     return "📊 Category-wise breakdown chahiye? (haan / nahi)"
 
 
-def format_category_breakdown(rows: list[dict], day: date, lang: Lang = "roman_urdu") -> str:
-    if not rows:
-        if lang == "urdu":    return "آج کوئی product-wise sale ریکارڈ نہیں ملی۔"
-        if lang == "english": return "No product-level sales recorded today."
-        return "Aaj koi product-wise sale record nahi mili."
-
+def format_category_breakdown(
+    rows: list[dict],
+    day: date,
+    lang: Lang = "roman_urdu",
+    supplier_payments: list[dict] | None = None,
+) -> str:
     date_str = day.strftime("%d %b %Y")
-    if lang == "urdu":
-        lines = [f"📊 Category Breakdown — {date_str}", ""]
-    elif lang == "english":
-        lines = [f"📊 Category Breakdown — {date_str}", ""]
-    else:
-        lines = [f"📊 Category Breakdown — {date_str}", ""]
+    lines = [f"📊 Category Breakdown — {date_str}", ""]
 
-    # Group rows by category
+    if not rows and not supplier_payments:
+        if lang == "urdu":    lines.append("آج کوئی product-wise sale ریکارڈ نہیں ملی۔")
+        elif lang == "english": lines.append("No product-level sales recorded today.")
+        else: lines.append("Aaj koi product-wise sale record nahi mili.")
+        return "\n".join(lines)
+
     from collections import defaultdict
     by_cat: dict[str, list] = defaultdict(list)
     for r in rows:
@@ -576,13 +588,29 @@ def format_category_breakdown(rows: list[dict], day: date, lang: Lang = "roman_u
             qty_str = f" {int(qty)}{' '+unit if unit else ''}" if qty else ""
             lines.append(f"  • {name}{qty_str} — {_fmt_money(price)}")
         grand_total += cat_total
+
+    # Supplier payments section
+    if supplier_payments:
+        lines.append("")
+        if lang == "urdu":
+            lines.append("💸 *سپلائر کو دیے گئے*")
+        elif lang == "english":
+            lines.append("💸 *Supplier Payments*")
+        else:
+            lines.append("💸 *Supplier ko Diye*")
+        sup_total = 0.0
+        for sp in supplier_payments:
+            paid = float(sp["total_paid"] or 0)
+            sup_total += paid
+            lines.append(f"  • {sp['supplier_name']} — {_fmt_money(paid)}")
+
     lines.append("")
     if lang == "urdu":
-        lines.append(f"*کل: {_fmt_money(grand_total)}*")
+        lines.append(f"*فروخت کل: {_fmt_money(grand_total)}*")
     elif lang == "english":
-        lines.append(f"*Total: {_fmt_money(grand_total)}*")
+        lines.append(f"*Sales Total: {_fmt_money(grand_total)}*")
     else:
-        lines.append(f"*Kul: {_fmt_money(grand_total)}*")
+        lines.append(f"*Sales Kul: {_fmt_money(grand_total)}*")
     return "\n".join(lines)
 
 

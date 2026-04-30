@@ -224,6 +224,7 @@ async def _handle_transaction(
                 "source": source,
                 "raw_message": raw_message,
                 "transcript": transcript,
+                "original_name": txn.customer_name,
                 "candidates": [
                     {"id": str(c["id"]), "name": c["name"], "balance": c["balance"]}
                     for c in candidates
@@ -337,9 +338,13 @@ async def _handle_query(
         return await build_daily_summary_text(shopkeeper, day)
 
     if q.query_type == QueryType.CATEGORY_BREAKDOWN:
+        import asyncio as _asyncio
         day = _date_from_range(q.date_range, tz)
-        rows = await db.get_category_breakdown(sk_id, day, tz)
-        return replies.format_category_breakdown(rows, day, lang)
+        rows, sup_payments = await _asyncio.gather(
+            db.get_category_breakdown(sk_id, day, tz),
+            db.get_supplier_payments_day(sk_id, day, tz),
+        )
+        return replies.format_category_breakdown(rows, day, lang, supplier_payments=sup_payments)
 
     return replies.generic_error(lang)
 
@@ -414,7 +419,7 @@ async def _handle_disambiguation(
     pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
     candidates = pending.get("candidates", [])
 
-    # Try numeric choice first, then name match
+    # Try numeric choice first, then name match against candidates
     choice = text.strip()
     selected = None
     if choice.isdigit():
@@ -429,15 +434,25 @@ async def _handle_disambiguation(
                 selected = c
                 break
 
-    if not selected:
-        # Ask again
-        return replies.ask_disambiguation(candidates, lang), None, None
-
+    # Always clear state — never loop
     await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
 
-    contact_row = await db.get_contact_by_id(selected["id"])
-    if not contact_row:
-        contact_row = await db.create_contact(sk_id, selected["name"], pending["contact_type"])
+    if selected:
+        contact_row = await db.get_contact_by_id(selected["id"])
+        if not contact_row:
+            contact_row = await db.create_contact(sk_id, selected["name"], pending["contact_type"])
+    else:
+        # "koi bhi nae" / "naya" / user typed a corrected name → decide which name to use
+        cancel_tokens = {"nahi", "nai", "nae", "nahin", "no", "naya", "new", "alag", "cancel"}
+        reply_tokens = set(choice.lower().split())
+        if bool(reply_tokens & cancel_tokens):
+            # Shopkeeper said "none of these" → create new with original spoken name
+            new_name = pending.get("original_name") or choice
+        else:
+            # Shopkeeper typed a corrected/different name → use it
+            new_name = choice
+        contact_row = await db.create_contact(sk_id, new_name, pending["contact_type"])
+
     mark_confirmed(sk_id, str(contact_row["id"]))
     ttype = TransactionType(pending["ttype"])
     new_row = await db.insert_transaction(

@@ -208,6 +208,28 @@ async def insert_transaction(
     return dict(row)
 
 
+async def get_supplier_payments_day(
+    shopkeeper_id: str, day: date, tz: str = "Asia/Karachi",
+) -> list[dict]:
+    """Per-supplier total payments_made for a given local date."""
+    async with conn() as c:
+        rows = await c.fetch(
+            """
+            SELECT c.name AS supplier_name, SUM(t.amount) AS total_paid
+              FROM transactions t
+              JOIN contacts c ON c.id = t.contact_id
+             WHERE t.shopkeeper_id = $1
+               AND t.type = 'payment_made'
+               AND t.is_deleted = FALSE
+               AND (t.occurred_at AT TIME ZONE $2)::date = $3
+             GROUP BY c.name
+             ORDER BY total_paid DESC
+            """,
+            shopkeeper_id, tz, day,
+        )
+    return [dict(r) for r in rows]
+
+
 async def get_customers_with_positive_balance(shopkeeper_id: str) -> list[dict]:
     """Return all customers who still owe money (balance > 0)."""
     async with conn() as c:

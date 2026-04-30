@@ -81,7 +81,8 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
        ne diye / ny diye / bhej diye / lota diya" = payment_received (customer paid back)
     - "ny" and "ne" are Urdu subject markers (e.g. "Ali ny diye" = "Ali gave") —
       the person named is the one paying, so intent = payment_received
-    - "supplier ko diye / supplier ko bheji" = payment_made
+    - "supplier ko diye / supplier ko bheji / X ko paise diye / X ko payment ki" = payment_made
+      (this records ONLY the paid amount; it does NOT imply the full balance is cleared)
     - Amounts may be written as "500", "500 rupay", "500rs", "5 sau", "hazaar",
       "do hazaar". Convert to a plain number. "hazaar" = 1000, "lakh" = 100000.
     - Strip honorifics from customer_name (bhai, sahib, apa, baji, uncle, ji).
