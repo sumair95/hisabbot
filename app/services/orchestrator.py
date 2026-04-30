@@ -336,6 +336,11 @@ async def _handle_query(
         day = _date_from_range(q.date_range, tz)
         return await build_daily_summary_text(shopkeeper, day)
 
+    if q.query_type == QueryType.CATEGORY_BREAKDOWN:
+        day = _date_from_range(q.date_range, tz)
+        rows = await db.get_category_breakdown(sk_id, day, tz)
+        return replies.format_category_breakdown(rows, day, lang)
+
     return replies.generic_error(lang)
 
 

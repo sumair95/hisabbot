@@ -33,6 +33,7 @@ class QueryType(str, Enum):
     WHO_I_OWE = "who_i_owe"
     CUSTOMER_BALANCE = "customer_balance"
     DAILY_SUMMARY = "daily_summary"
+    CATEGORY_BREAKDOWN = "category_breakdown"
 
 
 class ItemLine(BaseModel):

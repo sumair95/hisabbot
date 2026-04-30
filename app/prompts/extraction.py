@@ -38,7 +38,8 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
       - who_owes_me:       list of customers with outstanding udhaar
       - who_i_owe:         list of suppliers the shop owes
       - customer_balance:  balance for a specific named customer/supplier
-      - daily_summary:     full end-of-day summary
+      - daily_summary:       full end-of-day summary
+      - category_breakdown:  sales grouped by product category
 
     Output schema (strict):
     {
@@ -52,7 +53,7 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "confidence": 0.92
       } | null,
       "query": {
-        "query_type": "daily_sales"|"who_owes_me"|"who_i_owe"|"customer_balance"|"daily_summary",
+        "query_type": "daily_sales"|"who_owes_me"|"who_i_owe"|"customer_balance"|"daily_summary"|"category_breakdown",
         "customer_name": "Ahmed" | null,
         "date_range": "today"|"yesterday"|"this_week"|"this_month"|"all"
       } | null,
@@ -106,6 +107,8 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "sweets"        — mithai, gulab jamun, barfi, halwa, gur, shakkar
         "other"         — anything that does not fit above
     - If only an amount is mentioned with no product, leave items as [].
+    - "category wise / category breakdown / har category ki sale / category mein dikhao"
+      = QUERY with query_type "category_breakdown"
     - "sary udhaar hata do / sab ka udhaar clear karo / sab ny paisy dy diye / clear all udhaar"
       = CORRECTION with correction_type "clear_all_udhaar". No transaction or query needed.
     - If a message mentions both a paid amount AND a remaining amount (e.g. "500 mein se 300
@@ -197,11 +200,15 @@ EXTRACTION_EXAMPLES = dedent("""
     User: "Ahmed nae nae Ali ne paise diye the"
     {"intent":"CORRECTION","transaction":null,"query":null,"reminder":null,"correction":{"correction_type":"fix_customer","new_item_name":null,"new_amount":null,"new_customer_name":"Ali"},"correction_hint":"Ahmed nae nae Ali ne paise diye the","language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
-    Example 16 (bulk udhaar clear)
+    Example 16 (category breakdown query)
+    User: "aaj ki category wise sale dikhao"
+    {"intent":"QUERY","transaction":null,"query":{"query_type":"category_breakdown","customer_name":null,"date_range":"today"},"reminder":null,"correction":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 17 (bulk udhaar clear)
     User: "pichly sary udhar hata do, sb ny paisy dy diye hain"
     {"intent":"CORRECTION","transaction":null,"query":null,"reminder":null,"correction":{"correction_type":"clear_all_udhaar","new_item_name":null,"new_amount":null,"new_customer_name":null},"correction_hint":"sb ny paisy dy diye hain","language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 
-    Example 17 (partial payment — extract only paid amount)
+    Example 18 (partial payment — extract only paid amount)
     User: "Ahmed ne 500 mein se 300 diye, 200 abhi bhi baqi hai"
     {"intent":"TRANSACTION","transaction":{"transaction_type":"payment_received","customer_name":"Ahmed","amount":300,"items":[],"notes":"200 baqi","confidence":0.95},"query":null,"reminder":null,"correction":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
 """).strip()
