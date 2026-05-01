@@ -36,10 +36,14 @@ class Settings(BaseSettings):
     anthropic_api_key: str = Field(default="")
     anthropic_model: str = Field(default="claude-haiku-4-5-20251001")
 
-    # OpenAI
+    # OpenAI (extraction fallback only — STT moved to Groq)
     openai_api_key: str = Field(default="")
-    openai_whisper_model: str = Field(default="whisper-1")
     fallback_openai_model: str = Field(default="gpt-4o-mini")
+
+    # Groq (STT — whisper-large-v3 via OpenAI-compatible API)
+    groq_api_key: str = Field(default="")
+    groq_whisper_model: str = Field(default="whisper-large-v3")
+    groq_base_url: str = Field(default="https://api.groq.com/openai/v1")
 
     # Business
     default_timezone: str = Field(default="Asia/Karachi")
@@ -61,8 +65,8 @@ class Settings(BaseSettings):
             missing.append("SUPABASE_DB_URL")
         if not self.anthropic_api_key:
             missing.append("ANTHROPIC_API_KEY")
-        if not self.openai_api_key:
-            missing.append("OPENAI_API_KEY (for voice notes)")
+        if not self.groq_api_key:
+            missing.append("GROQ_API_KEY (for voice notes)")
         return missing
 
 

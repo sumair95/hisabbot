@@ -1,7 +1,8 @@
 """
-Speech-to-text via OpenAI Whisper.
-WhatsApp voice notes are OGG/Opus. Whisper accepts OGG directly so no
-conversion needed.
+Speech-to-text via Groq (whisper-large-v3).
+Groq exposes an OpenAI-compatible audio endpoint, so we reuse the OpenAI
+SDK with a different base_url. WhatsApp voice notes are OGG/Opus and
+whisper-large-v3 accepts them directly.
 """
 from __future__ import annotations
 import io
@@ -15,41 +16,43 @@ log = get_logger("stt")
 _client: AsyncOpenAI | None = None
 
 
-def _openai() -> AsyncOpenAI:
+def _groq() -> AsyncOpenAI:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=get_settings().openai_api_key)
+        settings = get_settings()
+        _client = AsyncOpenAI(
+            api_key=settings.groq_api_key,
+            base_url=settings.groq_base_url,
+        )
     return _client
 
 
 async def transcribe(audio_bytes: bytes, filename: str = "voice.ogg") -> str:
     """
-    Transcribe audio bytes to text. We hint Urdu as the primary language,
-    but Whisper handles code-mixed Urdu/English/Roman-Urdu speech reasonably
-    well when language='ur' is set.
+    Transcribe audio bytes to text via Groq's whisper-large-v3.
+    Urdu is hinted as the primary language; the model still handles
+    code-mixed Urdu/English/Roman-Urdu speech well.
     """
     settings = get_settings()
-    if not settings.openai_api_key:
-        raise RuntimeError("OPENAI_API_KEY is not configured")
+    if not settings.groq_api_key:
+        raise RuntimeError("GROQ_API_KEY is not configured")
 
-    client = _openai()
-    # The OpenAI SDK expects a file-like with a name attribute.
+    client = _groq()
     buf = io.BytesIO(audio_bytes)
     buf.name = filename
 
     try:
         resp = await client.audio.transcriptions.create(
-            model=settings.openai_whisper_model,
+            model=settings.groq_whisper_model,
             file=buf,
-            language="ur",           # primary: Urdu. Whisper still handles mixed speech.
+            language="ur",
             response_format="text",
             temperature=0.0,
         )
-        # response_format='text' returns a plain string in the SDK
         text = resp if isinstance(resp, str) else getattr(resp, "text", str(resp))
         text = (text or "").strip()
-        log.info("stt.ok", chars=len(text))
+        log.info("stt.ok", chars=len(text), provider="groq", model=settings.groq_whisper_model)
         return text
     except Exception as e:  # noqa: BLE001
-        log.error("stt.failed", error=str(e))
+        log.error("stt.failed", error=str(e), provider="groq")
         raise

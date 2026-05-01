@@ -28,7 +28,8 @@ C:\Users\admin\AI Agent\
       verification immediately — 1–2 week wait)
 - [ ] Supabase project in `ap-south-1` (Mumbai)
 - [ ] Anthropic console + API key
-- [ ] OpenAI console + API key (for Whisper)
+- [ ] **Groq console + API key** (for whisper-large-v3 voice notes) — console.groq.com
+- [ ] OpenAI console + API key (extraction fallback only — `gpt-4o-mini`)
 
 ### A3. Configure `.env`
 ```
