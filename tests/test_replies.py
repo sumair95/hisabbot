@@ -64,5 +64,6 @@ def test_format_daily_summary():
     assert "Ahmed" in msg
     assert "Akbar Trader" in msg
     assert "15,000" in msg
-    # net = 12500 + 1800 - 5000 = 9300
-    assert "9,300" in msg
+    # total_sales = cash_sales + credit_sales = 12500 + 3200 = 15700
+    # (payments_received and payments_made are shown but NOT netted)
+    assert "15,700" in msg

@@ -265,7 +265,7 @@ def format_daily_summary(
     top_suppliers: list[dict],
     lang: Lang = "roman_urdu",
 ) -> str:
-    net = cash_sales + payments_received - payments_made
+    total_sales = cash_sales + credit_sales
     date_str = summary_date.strftime('%d %b %Y')
 
     if lang == "urdu":
@@ -284,7 +284,7 @@ def format_daily_summary(
             lines += ["", "🟢 سپلائر کو دینا ہے:"]
             for r in top_suppliers[:5]:
                 lines.append(f"• {r['name']} — {_fmt_money(abs(float(r['balance'])))}")
-        lines += ["", f"خالص آج: {'+' if net >= 0 else ''}{_fmt_money(net)}", "", "برکت ہو! 🌙"]
+        lines += ["", f"کل فروخت: {_fmt_money(total_sales)}", "", "برکت ہو! 🌙"]
         return "\n".join(lines)
 
     is_en = lang == "english"
@@ -304,7 +304,7 @@ def format_daily_summary(
         lines += ["", "🟢 " + ("Top suppliers you owe:" if is_en else "Supplier ko Dene Hain:")]
         for r in top_suppliers[:5]:
             lines.append(f"• {r['name']} — {_fmt_money(abs(float(r['balance'])))}")
-    lines += ["", f"{'Net today' if is_en else 'Net aaj'}: {'+' if net >= 0 else ''}{_fmt_money(net)}", ""]
+    lines += ["", f"{'Total sales' if is_en else 'Kul Sales'}: {_fmt_money(total_sales)}", ""]
     lines.append("Have a good evening! 🌙" if is_en else "Barkat ho! 🌙")
     return "\n".join(lines)
 

@@ -5,6 +5,89 @@ Read this when resuming in a new session to know exactly where you are.
 
 ---
 
+## 2026-05-01 — Daily summary bottom line fixed
+
+**Goal:** stop the daily summary from netting borrower repayments and
+supplier payments into the headline number.
+
+**Bug reported by user:**
+The 10pm summary's "Net today" line was computing
+`cash_sales + payments_received - payments_made`. So if a customer paid
+back PKR 1,800 of an old debt and the shop paid PKR 5,000 to a
+supplier, those moved the headline number — confusing for shopkeepers
+who just want to know "how much did I sell today".
+
+**Done:**
+- `app/services/replies.py:format_daily_summary` — replaced `net`
+  with `total_sales = cash_sales + credit_sales`. Borrower receipts
+  and supplier payments still display as their own lines but no
+  longer affect the total.
+- Label: "Net today" / "Net aaj" / "خالص آج" → "Total sales" /
+  "Kul Sales" / "کل فروخت".
+- `tests/test_replies.py` — assertion updated from `9,300` to
+  `15,700` (the new total = 12500 cash + 3200 credit).
+- Manually exercised both Roman-Urdu and English variants — output
+  verified clean.
+- `CHANGELOG.md` bumped to 0.2.1.
+
+**Decision (assumed, flagged to user):**
+- "Sum of sales done" interpreted as cash_sales + credit_sales (both
+  count as sales; credit is just unpaid). If user wanted cash-only,
+  the line is one edit away.
+
+**NOT done:**
+- Not pushed to GitHub yet — user typically pushes manually. Local
+  changes only.
+- Railway redeploy needed for shopkeepers to see the new format
+  tonight at 10pm PKT.
+
+---
+
+## 2026-04-30 — STT migrated from OpenAI Whisper to Groq
+
+**Goal:** swap the speech-to-text provider to cut cost and latency.
+
+**Done:**
+- `app/services/stt.py` rewritten to use Groq's OpenAI-compatible
+  audio endpoint with `whisper-large-v3`. Same `transcribe()`
+  signature → no caller changes.
+- `app/config.py` — added `groq_api_key`, `groq_whisper_model`,
+  `groq_base_url`; runtime check now requires `GROQ_API_KEY` (was
+  `OPENAI_API_KEY`).
+- `.env` and `.env.example` updated. `OPENAI_API_KEY` retained for
+  the extraction fallback (`gpt-4o-mini`); only the Whisper path moved.
+- `CHANGELOG.md` bumped to `0.2.0`.
+
+**NOT done this session (pending you):**
+- Create Groq account at console.groq.com and paste key into
+  `.env` → `GROQ_API_KEY=...`.
+- Add `GROQ_API_KEY` to Railway Variables tab and redeploy.
+- Smoke test: send a Roman-Urdu voice note via WhatsApp, watch
+  Railway logs for `stt.ok provider=groq`.
+
+**Decisions:**
+- Kept `OPENAI_API_KEY` because `app/services/llm.py` still calls
+  `gpt-4o-mini` when Anthropic extraction fails. Don't remove it.
+- Stayed on the OpenAI Python SDK (just changed `base_url`) instead
+  of adding a `groq` SDK dependency — fewer moving parts.
+
+---
+
+## 2026-04-21 — Session with Claude Code
+
+- PHASE 2 complete: code pushed to GitHub at https://github.com/sumair95/hisabbot (branch: main). Pending: cloud accounts (Supabase, Anthropic, OpenAI, Meta, Railway).
+- Supabase project created (region: Singapore). SUPABASE_DB_URL written to .env. Schema not yet applied.
+- Anthropic API key created and written to .env (ANTHROPIC_API_KEY).
+- OpenAI API key created and written to .env (OPENAI_API_KEY).
+- Meta/WhatsApp credentials written to .env: WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_BUSINESS_ACCOUNT_ID, WHATSAPP_ACCESS_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_WEBHOOK_VERIFY_TOKEN=hisabbot-webhook-2026.
+- Railway deployed successfully. App live at https://hisabbot-production-aa5a.up.railway.app — healthz returns ok:true, missing_config:[].
+- Supabase schema applied. WhatsApp webhook registered. End-to-end test passed.
+- Smart name matching: always ask confirmation on match (exact or fuzzy), 10-min session memory skips re-asking, digit normalisation (Ali1=Ali 1), 60-sec contact list cache, extra-token penalty prevents Ali Ahmed matching Ali silently.: bot asks "Kaun sa? 1. Ahmed Khan 2. Ahmed Bhai" when multiple contacts match. Stores pending_tx + bot_state in DB.
+- Daily summary moved to 10 PM PKT (DAILY_SUMMARY_HOUR=22).
+- DB migration applied: bot_state and pending_tx columns added to shopkeepers table.
+
+---
+
 ## 2026-04-20 — Session 2 (continuation)
 
 **Goal:** finish the MVP scaffold started in session 1 and verify it runs.
