@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.2.4] — 2026-05-02 — Shop-rename via LLM intent (SETTINGS_CHANGE)
+
+### Changed
+- Replaced the keyword-matcher approach (0.2.2 / 0.2.3) with a proper
+  LLM intent: `Intent.SETTINGS_CHANGE`. The extraction LLM now
+  classifies "change shop name" phrasings directly and extracts the
+  new name (if given) in a single pass.
+- Added `ExtractedSettingsChange` schema with `setting_type` and
+  `new_value` fields.
+- Updated `app/prompts/extraction.py` with the new intent description,
+  output schema, dedicated rules block, and four few-shot examples
+  (19–22) covering single-message rename, two-step flag-only rename,
+  Urdu script, and English variants.
+- New orchestrator handler `_handle_settings_change` saves the shop
+  name immediately when the LLM returned a non-null `new_value`,
+  otherwise sets `onboarding_state="awaiting_shop_name"` so the next
+  message is captured by the existing onboarding handler.
+- Removed `_is_shop_rename_intent` and the keyword-based webhook
+  branch — LLM is now the single source of truth.
+
+### Why
+- Voice notes go through Whisper with `language="ur"`, returning
+  Urdu script. The keyword approach was missing common transcription
+  variants ("شاپ کا نیم چینج کرو", filler words, mixed code) and
+  also couldn't parse a name out of "shop ka naam X rakh do" in a
+  single message. LLM handles both naturally.
+
+---
+
 ## [0.2.3] — 2026-05-02 — Shop-rename: keyword-combination matcher
 
 ### Fixed

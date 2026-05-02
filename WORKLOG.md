@@ -5,6 +5,60 @@ Read this when resuming in a new session to know exactly where you are.
 
 ---
 
+## 2026-05-02 — Shop-rename moved to LLM intent (final)
+
+**Goal:** make the shop rename actually work, after two failed
+keyword-matcher iterations.
+
+**User report:**
+After 0.2.3 ("dukaan k naam change karke ... rakh do" voice flow),
+still didn't work. User wanted both two-step (ask, then provide
+name) AND single-message ("change shop name to X") flows.
+
+**Root cause (real one this time):**
+Keyword matching was the wrong tool. Whisper voice transcripts
+include arbitrary filler words, code-mixed Urdu/Roman, English
+words written in Urdu script ("نیم", "چینج"), etc. Trying to keep
+a keyword list complete is whack-a-mole. The LLM extractor sees
+every message anyway — it's the natural place to classify intent
+and extract the new name from natural phrasing.
+
+**Done:**
+- `app/models/schemas.py` — added `Intent.SETTINGS_CHANGE` and
+  `ExtractedSettingsChange` (`setting_type`, `new_value`).
+- `app/prompts/extraction.py` — added intent description, output
+  schema field, dedicated rules block (filler-word stripping
+  guidance, false-positive guard against contact-name corrections),
+  and four few-shot examples (19–22) covering Roman/Urdu/English
+  and single/two-step variants.
+- `app/services/orchestrator.py` — new `_handle_settings_change`
+  handler. Single-message → save immediately + send onboarding_done
+  reply. Flag-only → set state to `awaiting_shop_name` and ask via
+  `replies.ask_new_shop_name` (existing onboarding handler picks up
+  the next message).
+- `app/routers/webhook.py` — deleted `_is_shop_rename_intent` and
+  the keyword branch. LLM is single source of truth now.
+- Schema parsing verified locally for SETTINGS_CHANGE outputs in
+  Roman, Urdu script, and the existing TRANSACTION case (no
+  regression).
+
+**Decisions:**
+- LLM handles natural phrasings — no need to enumerate variants.
+- Filler-word stripping ("rakh do", "kar do", "to") delegated to
+  the LLM via prompt instructions, not done in Python.
+- Dropped keyword fallback. Keeps logic in one place; LLM failures
+  already return generic_error which is the same UX as a missed
+  keyword anyway.
+
+**NOT done:**
+- Other settings (language, voice toggle) still use keyword commands
+  in webhook.py. They work fine; not worth migrating.
+- LLM may occasionally extract the wrong name (e.g. if user says
+  "shop ka naam Ali ka tha woh galat hai"). If this becomes a
+  pattern, add more confidence-gated examples.
+
+---
+
 ## 2026-05-02 — Shop-rename keyword matcher (voice-transcript fix)
 
 **Goal:** make the shop-rename trigger from earlier today actually fire

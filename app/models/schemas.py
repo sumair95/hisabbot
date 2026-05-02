@@ -16,6 +16,7 @@ class Intent(str, Enum):
     CORRECTION = "CORRECTION"
     REMINDER = "REMINDER"
     ONBOARDING = "ONBOARDING"
+    SETTINGS_CHANGE = "SETTINGS_CHANGE"
     GREETING_OR_OTHER = "GREETING_OR_OTHER"
 
 
@@ -73,6 +74,11 @@ class ExtractedCorrection(BaseModel):
     new_customer_name: str | None = None  # for fix_customer
 
 
+class ExtractedSettingsChange(BaseModel):
+    setting_type: Literal["shop_name"]
+    new_value: str | None = None  # null when shopkeeper said "change shop name" without giving the new one
+
+
 class ExtractionResult(BaseModel):
     """Top-level output from the extraction LLM call."""
     intent: Intent
@@ -80,6 +86,7 @@ class ExtractionResult(BaseModel):
     query: ExtractedQuery | None = None
     reminder: ExtractedReminder | None = None
     correction: ExtractedCorrection | None = None
+    settings_change: ExtractedSettingsChange | None = None
     correction_hint: str | None = None
     language_detected: Literal["urdu", "roman_urdu", "english", "mixed"] = "roman_urdu"
     needs_clarification: bool = False

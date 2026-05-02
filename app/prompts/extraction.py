@@ -24,6 +24,11 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
       - REMINDER: the shopkeeper wants to be reminded to pay/receive money
         on a future date ("kal Ahmed ko 500 dene hain", "3 May ko bijli bill")
       - ONBOARDING: the shopkeeper is answering a setup question (e.g. shop name)
+      - SETTINGS_CHANGE: the shopkeeper wants to change a profile/setting on
+        the bot (currently only shop_name). Triggers on phrasings about the
+        SHOP/DUKAAN/STORE name being wrong, needing change, or being given
+        a new value. Does NOT include corrections to a customer/contact's
+        name (those are CORRECTION with correction_type "fix_customer").
       - GREETING_OR_OTHER: hi/hello/thanks/anything else
 
     Transaction types:
@@ -69,6 +74,10 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
         "new_amount": 300 | null,
         "new_customer_name": "Ali" | null
       } | null,
+      "settings_change": {
+        "setting_type": "shop_name",
+        "new_value": "Ahmed General Store" | null
+      } | null,
       "correction_hint": "last entry galat thi" | null,
       "language_detected": "urdu"|"roman_urdu"|"english"|"mixed",
       "needs_clarification": false,
@@ -110,6 +119,21 @@ EXTRACTION_SYSTEM_PROMPT = dedent("""
     - If only an amount is mentioned with no product, leave items as [].
     - "category wise / category breakdown / har category ki sale / category mein dikhao"
       = QUERY with query_type "category_breakdown"
+    - SETTINGS_CHANGE for shop name:
+      * Triggers: "dukaan ka naam galat / shop ka naam wrong / shop name change /
+        rename shop / shop ka naam X rakh do / shop ka naam change karke X /
+        دکان کا نام تبدیل / شاپ کا نام بدلو / دکان کا نام Y رکھ دو".
+      * If shopkeeper PROVIDES the new name in the same message (e.g. "shop ka
+        naam Akbar General rakh do", "rename shop to Ahmed Store", "دکان کا
+        نام احمد اسٹور رکھ دو"), set new_value to the extracted shop name.
+      * If shopkeeper only flags the issue without giving a new name (e.g.
+        "shop ka naam galat hai", "rename my shop", "دکان کا نام غلط ہے"),
+        set new_value to null. The bot will ask for it in the next turn.
+      * STRIP filler words from new_value: "rakh do", "rakhna", "kar do",
+        "kardo", "to", "se", "karke", "to be", commas, quotes. Keep ONLY
+        the actual shop name.
+      * NEVER classify a contact-name correction (e.g. "Ahmed nahi Ali tha")
+        as SETTINGS_CHANGE — that is CORRECTION with fix_customer.
     - "sary udhaar hata do / sab ka udhaar clear karo / sab ny paisy dy diye / clear all udhaar"
       = CORRECTION with correction_type "clear_all_udhaar". No transaction or query needed.
     - If a message mentions both a paid amount AND a remaining amount (e.g. "500 mein se 300
@@ -212,6 +236,31 @@ EXTRACTION_EXAMPLES = dedent("""
     Example 18 (partial payment — extract only paid amount)
     User: "Ahmed ne 500 mein se 300 diye, 200 abhi bhi baqi hai"
     {"intent":"TRANSACTION","transaction":{"transaction_type":"payment_received","customer_name":"Ahmed","amount":300,"items":[],"notes":"200 baqi","confidence":0.95},"query":null,"reminder":null,"correction":null,"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 19 (settings change — single message, new name provided)
+    User: "dukaan ka naam change karke Ahmed General Store rakh do"
+    {"intent":"SETTINGS_CHANGE","transaction":null,"query":null,"reminder":null,"correction":null,"settings_change":{"setting_type":"shop_name","new_value":"Ahmed General Store"},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 20 (settings change — flag only, no new name)
+    User: "shop ka naam galat hai"
+    {"intent":"SETTINGS_CHANGE","transaction":null,"query":null,"reminder":null,"correction":null,"settings_change":{"setting_type":"shop_name","new_value":null},"correction_hint":null,"language_detected":"roman_urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 21 (settings change — Urdu script, new name provided)
+    User: "دکان کا نام احمد اسٹور رکھ دو"
+    {"intent":"SETTINGS_CHANGE","transaction":null,"query":null,"reminder":null,"correction":null,"settings_change":{"setting_type":"shop_name","new_value":"احمد اسٹور"},"correction_hint":null,"language_detected":"urdu","needs_clarification":false,"clarification_question":null}
+
+    Example 22 (settings change — English single message)
+    User: "rename my shop to Akbar General"
+    {"intent":"SETTINGS_CHANGE","transaction":null,"query":null,"reminder":null,"correction":null,"settings_change":{"setting_type":"shop_name","new_value":"Akbar General"},"correction_hint":null,"language_detected":"english","needs_clarification":false,"clarification_question":null}
+
+    Example 23 (settings change — onboarding answer-style after bot asks)
+    User: "Ahmed General Store"
+    Context: bot just asked "Naya dukaan ka naam likhein"
+    NOTE: when the message is the bare new shop name, you cannot tell if it's
+    a SETTINGS_CHANGE or a greeting — leave the orchestrator to handle it
+    (it will already be in `awaiting_shop_name` state). For this prompt,
+    classify as GREETING_OR_OTHER:
+    {"intent":"GREETING_OR_OTHER","transaction":null,"query":null,"reminder":null,"correction":null,"settings_change":null,"correction_hint":null,"language_detected":"english","needs_clarification":false,"clarification_question":null}
 """).strip()
 
 

@@ -122,6 +122,10 @@ async def handle_message(
             reply = replies.undo_success(lang) if removed else replies.undo_nothing(lang)
         return reply, extraction_json, None
 
+    if extraction.intent == Intent.SETTINGS_CHANGE and extraction.settings_change:
+        reply = await _handle_settings_change(shopkeeper, extraction, lang)
+        return reply, extraction_json, None
+
     # Greeting / other
     if extraction.clarification_question:
         return extraction.clarification_question, extraction_json, None
@@ -659,6 +663,28 @@ async def _handle_bulk_clear_confirm(
     customers = pending.get("customers", [])
     count = await db.bulk_record_payments_received(sk_id, customers)
     return replies.bulk_clear_done(count, lang), None, None
+
+
+async def _handle_settings_change(
+    shopkeeper: dict, extraction: ExtractionResult, lang: str,
+) -> str:
+    sc = extraction.settings_change
+    assert sc is not None
+    sk_id = str(shopkeeper["id"])
+
+    if sc.setting_type == "shop_name":
+        new_name = (sc.new_value or "").strip().strip("'\"").strip()[:100]
+        if new_name and len(new_name) >= 2:
+            # Single-message rename: save now and confirm
+            await db.update_shopkeeper(
+                sk_id, shop_name=new_name, onboarding_state="done"
+            )
+            return replies.onboarding_done(new_name, lang)
+        # Two-step rename: shopkeeper flagged the issue without giving a new name
+        await db.update_shopkeeper(sk_id, onboarding_state="awaiting_shop_name")
+        return replies.ask_new_shop_name(lang)
+
+    return replies.generic_error(lang)
 
 
 async def _handle_reminder(
