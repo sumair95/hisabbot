@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.3] — 2026-05-02 — Shop-rename: keyword-combination matcher
+
+### Fixed
+- Rename trigger from voice notes was missing because Whisper
+  (`language="ur"`) returns Urdu script, and the original phrase
+  list only contained two specific Urdu strings — most natural
+  Urdu phrasings ("شاپ کا نام بدلو", "دکان کا نام غلط ہے") failed
+  to match. The bot then fell through to the LLM, which asked its
+  own clarification question, leading users to think the rename
+  flow was broken.
+- Replaced the fixed phrase list in `app/routers/webhook.py` with
+  `_is_shop_rename_intent()` — keyword-combination matching. Needs
+  a "shop" word (shop/dukaan/store/شاپ/دکان/اسٹور) AND a "change"
+  word (change/rename/galat/wrong/tabdeel/بدل/غلط/...) AND, except
+  for the explicit "rename" verb, a "name" word (name/naam/نام).
+- Tested against 26 cases (Roman + Urdu-script transcripts +
+  false-positive guards). "Ahmed Store" by itself does NOT trigger
+  rename, so the second message correctly flows into the
+  awaiting_shop_name handler.
+
+---
+
 ## [0.2.2] — 2026-05-02 — Shop-name rename command
 
 ### Added

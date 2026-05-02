@@ -5,6 +5,44 @@ Read this when resuming in a new session to know exactly where you are.
 
 ---
 
+## 2026-05-02 — Shop-rename keyword matcher (voice-transcript fix)
+
+**Goal:** make the shop-rename trigger from earlier today actually fire
+on voice notes.
+
+**Bug reported by user (same day as feature shipped):**
+User sent a voice "shop ka naam galat" — bot asked for the new name,
+which looked correct. They sent the new name as a second voice — bot
+replied "Aap koi transaction record karna chahty hain?" (LLM clarification).
+
+Root cause: STT runs Whisper with `language="ur"`, so all voice gets
+transcribed to **Urdu script**. The fixed phrase list from 0.2.2 only
+had two specific Urdu strings ("دکان کا نام تبدیل", "دکان کا نام غلط")
+and missed common variants like "شاپ کا نام بدلو", "دکان کا نام غلط ہے",
+"شاپ کا نام تبدیل کرو". So the rename trigger never fired on voice; the
+LLM was the one asking for the new name. The second voice (the actual
+new name) also went to the LLM since DB state was still `done`.
+
+**Done:**
+- Replaced `_SHOP_RENAME_PHRASES` set with
+  `_is_shop_rename_intent(text)` — keyword-combination matcher.
+  Match requires: shop-word ∈ {shop, dukaan, dukan, store, شاپ, دکان,
+  اسٹور} + change-word ∈ {change, rename, galat, wrong, tabdeel, بدل,
+  غلط, …} + name-word ∈ {name, naam, نام}. The "rename" verb covers
+  English short-form on its own.
+- Tested 26 transcripts (Roman + Urdu-script + false-positive guards).
+  Critical: bare "Ahmed Store" (the user's reply with the new name)
+  does NOT match — so the second message correctly flows into the
+  `awaiting_shop_name` handler in orchestrator.
+- CHANGELOG bumped to 0.2.3.
+
+**Decision:**
+- Stayed with deterministic keyword matching rather than adding a
+  settings-intent to the LLM. Keeps latency / cost low and the
+  trigger is debuggable without LLM logs.
+
+---
+
 ## 2026-05-02 — Shop-name rename command
 
 **Goal:** let shopkeepers fix the shop name after onboarding without

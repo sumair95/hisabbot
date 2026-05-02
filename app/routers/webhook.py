@@ -20,13 +20,45 @@ _LANG_URDU_PHRASES   = {"urdu on", "urdu mein", "urdu script", "اردو میں"
 _LANG_ROMAN_PHRASES  = {"roman urdu", "roman mein", "roman likhein"}
 _LANG_ENGLISH_PHRASES = {"english on", "english mein", "english mein jawab", "angrezi mein", "reply in english"}
 
-_SHOP_RENAME_PHRASES = {
-    "change shop name", "shop name change", "rename shop", "shop rename",
-    "shop ka naam change", "dukaan ka naam change", "shop name update",
-    "naya shop name", "nai shop name", "shop ka naam galat",
-    "dukaan ka naam galat", "shop name wrong", "shop name ghalat",
-    "دکان کا نام تبدیل", "دکان کا نام غلط",
+# Shop-rename intent — keyword-combination match so voice transcripts
+# (which Whisper returns in Urdu script for `language="ur"`) and Roman-Urdu
+# variants both work. Requires a "shop" word AND a "change/wrong" word; the
+# "name" word is optional only when an explicit "rename" verb is used. This
+# keeps "ahmed ka naam galat" (contact correction) from triggering.
+_SHOP_WORDS_ROMAN  = {"shop", "dukaan", "dukan", "store"}
+_NAME_WORDS_ROMAN  = {"name", "naam"}
+_CHANGE_WORDS_ROMAN = {
+    "change", "rename", "update", "edit", "fix", "correct",
+    "galat", "ghalat", "wrong", "badal", "badle", "tabdeel",
+    "theek", "thik", "sahi",
 }
+_SHOP_WORDS_URDU   = {"شاپ", "دکان", "اسٹور"}
+_NAME_WORDS_URDU   = {"نام"}
+_CHANGE_WORDS_URDU = {"تبدیل", "بدل", "بدلو", "غلط", "درست", "ٹھیک", "صحیح"}
+
+
+def _is_shop_rename_intent(text: str) -> bool:
+    """True if text expresses 'change my shop name' in Roman/English/Urdu."""
+    t = text.lower().strip()
+
+    # Roman / English path
+    has_shop_roman   = any(w in t.split() or w in t for w in _SHOP_WORDS_ROMAN)
+    has_name_roman   = any(w in t.split() or w in t for w in _NAME_WORDS_ROMAN)
+    has_change_roman = any(w in t.split() or w in t for w in _CHANGE_WORDS_ROMAN)
+    if has_shop_roman and has_name_roman and has_change_roman:
+        return True
+    # "rename shop" / "rename store" — name word implicit in "rename"
+    if "rename" in t and has_shop_roman:
+        return True
+
+    # Urdu-script path (no .lower() needed; Urdu has no case)
+    has_shop_urdu   = any(w in text for w in _SHOP_WORDS_URDU)
+    has_name_urdu   = any(w in text for w in _NAME_WORDS_URDU)
+    has_change_urdu = any(w in text for w in _CHANGE_WORDS_URDU)
+    if has_shop_urdu and has_name_urdu and has_change_urdu:
+        return True
+
+    return False
 
 # Single-word triggers handled separately (need word-boundary check to avoid false positives)
 _LANG_URDU_WORDS   = {"اردو", "urdu"}
@@ -241,9 +273,9 @@ async def _process_one_message(msg: dict, value: dict) -> None:
         return
 
     # ---- Shop-name rename ----
-    # Only trigger on the rename phrase itself; the next message is treated
-    # as the new name by the existing onboarding handler in orchestrator.
-    if _contains(normalized, _SHOP_RENAME_PHRASES):
+    # Triggers on Roman, English, and Urdu-script variants. The next message
+    # is treated as the new name by the existing onboarding handler.
+    if _is_shop_rename_intent(text_content):
         await db.update_shopkeeper(sk_id, onboarding_state="awaiting_shop_name")
         reply_text = replies.ask_new_shop_name(lang)
         await _send_reply(phone_number, reply_text, kind="text", sk_id=sk_id, wa_id=wa_id,
