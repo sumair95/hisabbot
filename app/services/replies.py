@@ -370,6 +370,14 @@ def onboarding_ask_shop_name(lang: Lang = "roman_urdu") -> str:
     return "Apni dukaan ka naam likhein (e.g. 'Ahmed General Store')."
 
 
+def ask_new_shop_name(lang: Lang = "roman_urdu") -> str:
+    if lang == "urdu":
+        return "ٹھیک ہے! نیا دکان کا نام لکھیں۔"
+    if lang == "english":
+        return "OK! Please type the new shop name."
+    return "Theek hai! Naya dukaan ka naam likhein."
+
+
 def onboarding_done(shop_name: str, lang: Lang = "roman_urdu") -> str:
     if lang == "urdu":
         return (

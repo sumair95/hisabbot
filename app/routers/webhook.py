@@ -20,6 +20,14 @@ _LANG_URDU_PHRASES   = {"urdu on", "urdu mein", "urdu script", "اردو میں"
 _LANG_ROMAN_PHRASES  = {"roman urdu", "roman mein", "roman likhein"}
 _LANG_ENGLISH_PHRASES = {"english on", "english mein", "english mein jawab", "angrezi mein", "reply in english"}
 
+_SHOP_RENAME_PHRASES = {
+    "change shop name", "shop name change", "rename shop", "shop rename",
+    "shop ka naam change", "dukaan ka naam change", "shop name update",
+    "naya shop name", "nai shop name", "shop ka naam galat",
+    "dukaan ka naam galat", "shop name wrong", "shop name ghalat",
+    "دکان کا نام تبدیل", "دکان کا نام غلط",
+}
+
 # Single-word triggers handled separately (need word-boundary check to avoid false positives)
 _LANG_URDU_WORDS   = {"اردو", "urdu"}
 _LANG_ROMAN_WORDS  = {"roman"}
@@ -227,6 +235,17 @@ async def _process_one_message(msg: dict, value: dict) -> None:
     if new_lang:
         await db.update_shopkeeper(sk_id, language_pref=new_lang)
         reply_text = replies.lang_switched(new_lang)
+        await _send_reply(phone_number, reply_text, kind="text", sk_id=sk_id, wa_id=wa_id,
+                          text_content=text_content, transcript=transcript,
+                          extraction_json=None, txn_id=None, use_voice=False)
+        return
+
+    # ---- Shop-name rename ----
+    # Only trigger on the rename phrase itself; the next message is treated
+    # as the new name by the existing onboarding handler in orchestrator.
+    if _contains(normalized, _SHOP_RENAME_PHRASES):
+        await db.update_shopkeeper(sk_id, onboarding_state="awaiting_shop_name")
+        reply_text = replies.ask_new_shop_name(lang)
         await _send_reply(phone_number, reply_text, kind="text", sk_id=sk_id, wa_id=wa_id,
                           text_content=text_content, transcript=transcript,
                           extraction_json=None, txn_id=None, use_voice=False)

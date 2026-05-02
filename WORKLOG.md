@@ -5,6 +5,42 @@ Read this when resuming in a new session to know exactly where you are.
 
 ---
 
+## 2026-05-02 — Shop-name rename command
+
+**Goal:** let shopkeepers fix the shop name after onboarding without
+needing DB access.
+
+**Bug reported by user:**
+A new tester onboarded with a wrong shop name. When they tried to
+correct it ("change shop name"), the bot didn't understand and fell
+through to the generic "log a transaction" reply, because the LLM
+extractor has no settings/admin intent.
+
+**Done:**
+- `app/routers/webhook.py` — new `_SHOP_RENAME_PHRASES` set covering
+  English, Roman-Urdu, and Urdu-script triggers. Handler placed after
+  voice/lang toggles and before the LLM call.
+- When matched, sets `onboarding_state="awaiting_shop_name"` and
+  asks for the new name. The next message is consumed by the
+  existing onboarding handler in `orchestrator.py` (which already
+  saves shop_name and sets state back to `done`).
+- `app/services/replies.py` — new `ask_new_shop_name()` template in
+  Urdu, Roman-Urdu, and English.
+- Smoke-tested 13 phrase-matching cases — all pass. Generic strings
+  like "shop name" or "ahmed ko 500 udhaar" do NOT match.
+
+**Decisions:**
+- Reused the onboarding flow rather than building a separate
+  `bot_state="renaming"`. Simpler, fewer states, same UX.
+- Phrase-list matching, not LLM intent. Latency stays low and the
+  trigger is deterministic.
+
+**NOT done:**
+- Single-message rename ("change shop name to Ahmed Store") not
+  supported — always two-step. Easy follow-up if shopkeepers ask.
+
+---
+
 ## 2026-05-01 — Daily summary bottom line fixed
 
 **Goal:** stop the daily summary from netting borrower repayments and

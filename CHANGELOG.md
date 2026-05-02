@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.2.2] — 2026-05-02 — Shop-name rename command
+
+### Added
+- New keyword command: shopkeepers can now rename their shop after
+  onboarding by sending phrases like "change shop name",
+  "shop ka naam change", "rename shop", "dukaan ka naam galat",
+  "shop name wrong", "دکان کا نام تبدیل" etc.
+- Bot replies asking for the new name; the next message is saved as
+  the new `shop_name` (reuses the existing onboarding handler by
+  flipping `onboarding_state` back to `awaiting_shop_name`).
+- New reply template `replies.ask_new_shop_name()` in 3 languages.
+
+### Why
+- Tester onboarded with a wrong shop name had no way to fix it from
+  WhatsApp — the LLM didn't know about settings changes and the bot
+  fell through to the generic "log a transaction or ask sales" reply.
+
+---
+
 ## [0.2.1] — 2026-05-01 — Daily summary: total = sales only
 
 ### Fixed
