@@ -1,5 +1,44 @@
 # Changelog
 
+## [0.3.1] — 2026-05-04 — Quieter receipts, smarter corrections
+
+### Changed
+- **Receipts are quieter.** Removed `Aaj ki cash sales: PKR X` running
+  total from cash-sale confirmations (it was noise — daily summary
+  goes out at 10pm anyway). Removed `Ghalat hai? 'undo' likhein.` tail
+  from all 5 confirmation templates. Per-customer balance line
+  (`Kul udhaar Ahmed ka: PKR X`) is kept — that's receipt info.
+- **Corrections never auto-delete.** When a shopkeeper says vague
+  `undo` / `galat hai` / `cancel`, the bot now ALWAYS asks
+  delete-or-change instead of silently dropping the entry. Safer
+  against misheard transcripts.
+
+### Added
+- New correction flow scoped to a 60-second window:
+  - 0 recent entries → bot says be specific (e.g. "Ahmed wali galat thi")
+  - 1 recent entry → asks "Delete (1) ya Change (2)?"
+  - 2+ recent entries → lists numbered options, asks "Kis ko change?"
+    then asks delete/change for the picked one
+- Specific corrections from the LLM (e.g. "amount 600 tha",
+  "Ahmed nahi Ali tha") also use the 60s window: 1 entry → applied
+  silently, 2+ → disambiguates first, 0 → falls back to last.
+- Three new bot states: `awaiting_correction_pick`,
+  `awaiting_correction_action`, `awaiting_correction_details`.
+- New reply templates: `tx_one_liner`, `ask_correction_action`,
+  `ask_correction_disambiguation`, `ask_correction_details`,
+  `no_recent_correction`, `correction_cancelled`.
+- New DB helpers: `get_recent_transactions(sk_id, within_seconds)`,
+  `get_transaction_by_id`, `soft_delete_transaction_by_id`.
+
+### Why
+- Shopkeepers found the constant `Ghalat hai? 'undo' likhein.`
+  repetitive and the daily total redundant before 10pm.
+- Auto-deletion on bare "galat hai" was risky — Whisper sometimes
+  mishears and the shopkeeper wouldn't realise an entry was lost.
+  Forcing a confirmation step is small-friction insurance.
+
+---
+
 ## [0.3.0] — 2026-05-04 — Per-shop Whisper vocabulary biasing (self-improving STT)
 
 ### Added

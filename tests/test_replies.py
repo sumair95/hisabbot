@@ -7,14 +7,30 @@ def test_confirm_sale_credit_roman_urdu():
     msg = replies.confirm_sale_credit("Ahmed", 500, 1200)
     assert "Ahmed" in msg
     assert "500" in msg
-    assert "1,200" in msg
-    assert "undo" in msg.lower()
+    assert "1,200" in msg              # per-customer balance still shown
+    assert "undo" not in msg.lower()   # 0.3.1: removed undo prompt
 
 
 def test_confirm_sale_cash():
     msg = replies.confirm_sale_cash(300, 12500)
     assert "300" in msg
-    assert "12,500" in msg
+    assert "12,500" not in msg          # 0.3.1: today's running total removed
+    assert "undo" not in msg.lower()
+
+
+def test_correction_disambiguation_uses_summaries():
+    msg = replies.ask_correction_disambiguation(
+        ["Ahmed ko PKR 500 udhaar", "Cash sale PKR 200"]
+    )
+    assert "1." in msg and "2." in msg
+    assert "Ahmed" in msg
+    assert "Cash sale" in msg
+
+
+def test_ask_correction_action_offers_delete_or_change():
+    msg = replies.ask_correction_action("Ahmed ko PKR 500 udhaar")
+    assert "Delete" in msg or "delete" in msg.lower()
+    assert "Change" in msg or "change" in msg.lower() or "tabdeel" in msg.lower()
 
 
 def test_reply_daily_sales():

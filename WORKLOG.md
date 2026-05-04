@@ -5,6 +5,52 @@ Read this when resuming in a new session to know exactly where you are.
 
 ---
 
+## 2026-05-04 — Receipts quieter + correction flow gated by recency
+
+**Goal:** stop showing today's running total on every receipt; stop
+ending replies with "Ghalat hai? undo likhein"; make undo/correction
+safer by never auto-deleting on a vague "galat hai".
+
+**Done:**
+- All five `confirm_*` reply templates lost the `Ghalat hai? 'undo'
+  likhein.` tail. Cash-sale lost the `Aaj ki cash sales: PKR X` line
+  (10pm summary covers daily totals). Per-customer balance line on
+  credit/payment confirmations is kept (it's receipt info).
+- Added a recency-windowed correction flow:
+  - Vague "undo" / "galat hai" → look at last 60s
+    - 0 entries → "be specific, e.g. 'Ahmed wali galat thi'"
+    - 1 entry → ask "Delete (1) or Change (2)?" — never auto-delete
+    - 2+ entries → numbered list "Kis ko change karna hai?" → on
+      pick, ask delete/change
+  - Specific edits from LLM (fix_amount/fix_customer/fix_item) also
+    use the 60s window: 1=apply, 2+=disambiguate, 0=fall back to last
+- Three new states: awaiting_correction_pick (number-list reply),
+  awaiting_correction_action (delete/change choice),
+  awaiting_correction_details (waiting for new value after Change).
+- New helpers in `db.py`: `get_recent_transactions`,
+  `get_transaction_by_id`, `soft_delete_transaction_by_id`.
+- `tx_one_liner()` for short transaction summaries shown in menus.
+- 11/11 reply tests pass (added tests for new templates + verified
+  no regressions in daily summary formatting).
+
+**Decisions:**
+- Time window: single 60-second value (user said 30s for single,
+  60s for multi — simpler to use 60s throughout; if a single entry
+  is in 60s window, treat as single regardless of exact age).
+- "Change" path uses an extra state asking for the new value rather
+  than expecting it inline. Keeps menu predictable; a direct edit
+  ("amount 600 tha") in the action state still works as a shortcut.
+- Specific corrections still fall back to "last transaction" when
+  the recent window is empty — preserves existing behaviour for
+  same-day-but-old fixes.
+
+**NOT done:**
+- Did not version-gate the keyword shortcut. `undo` / `galat hai`
+  still works as a trigger but always asks delete-or-change first.
+- Did not migrate database — no schema changes needed.
+
+---
+
 ## 2026-05-04 — Self-improving STT via Whisper vocabulary biasing
 
 **Goal:** make the bot transcribe more accurately as each shopkeeper

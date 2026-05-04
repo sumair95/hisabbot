@@ -294,6 +294,62 @@ async def update_transaction(txn_id: str, **fields) -> dict[str, Any] | None:
     return dict(row) if row else None
 
 
+async def get_transaction_by_id(txn_id: str) -> dict[str, Any] | None:
+    """Fetch a single transaction (with contact name joined) by id."""
+    async with conn() as c:
+        row = await c.fetchrow(
+            """
+            SELECT t.*, c.name AS contact_name
+              FROM transactions t
+              LEFT JOIN contacts c ON c.id = t.contact_id
+             WHERE t.id = $1
+            """,
+            txn_id,
+        )
+    return dict(row) if row else None
+
+
+async def get_recent_transactions(
+    shopkeeper_id: str, within_seconds: int = 60,
+) -> list[dict]:
+    """
+    Recent non-deleted transactions for a shopkeeper, newest first, with
+    contact name joined. Used by the correction flow to scope edits/deletes
+    to a short post-write window.
+    """
+    async with conn() as c:
+        rows = await c.fetch(
+            """
+            SELECT t.*, c.name AS contact_name
+              FROM transactions t
+              LEFT JOIN contacts c ON c.id = t.contact_id
+             WHERE t.shopkeeper_id = $1
+               AND t.is_deleted = FALSE
+               AND t.created_at >= NOW() - ($2 || ' seconds')::interval
+             ORDER BY t.created_at DESC
+            """,
+            shopkeeper_id, str(within_seconds),
+        )
+    return [dict(r) for r in rows]
+
+
+async def soft_delete_transaction_by_id(
+    txn_id: str, reason: str = "user_undo",
+) -> dict | None:
+    """Soft-delete a specific transaction by id."""
+    async with conn() as c:
+        row = await c.fetchrow(
+            """
+            UPDATE transactions
+               SET is_deleted = TRUE, deleted_at = NOW(), deleted_reason = $2
+             WHERE id = $1 AND is_deleted = FALSE
+            RETURNING *
+            """,
+            txn_id, reason,
+        )
+    return dict(row) if row else None
+
+
 async def soft_delete_last_transaction(
     shopkeeper_id: str, reason: str = "user_undo",
 ) -> dict | None:

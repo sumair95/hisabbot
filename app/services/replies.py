@@ -83,21 +83,22 @@ def confirm_sale_credit(name: str, amount: float, balance: float, lang: Lang = "
     b = _fmt_money(balance)
     item_line = f"\n📦 {_fmt_items(items, lang)}" if items else ""
     if lang == "urdu":
-        return f"✅ {name} کو {m} ادھار دیا۔{item_line}\nکل ادھار {name} کا: {b}\n\nغلط ہے؟ 'undo' لکھیں۔"
+        return f"✅ {name} کو {m} ادھار دیا۔{item_line}\nکل ادھار {name} کا: {b}"
     if lang == "english":
-        return f"✅ Credit sale to {name}: {m}.{item_line}\nTotal owed by {name}: {b}\n\nWrong? Reply 'undo'."
-    return f"✅ {name} ko {m} udhaar.{item_line}\nKul udhaar {name} ka: {b}\n\nGhalat hai? 'undo' likhein."
+        return f"✅ Credit sale to {name}: {m}.{item_line}\nTotal owed by {name}: {b}"
+    return f"✅ {name} ko {m} udhaar.{item_line}\nKul udhaar {name} ka: {b}"
 
 
 def confirm_sale_cash(amount: float, today_total: float, lang: Lang = "roman_urdu", items: list | None = None) -> str:
+    """today_total is accepted for backwards compatibility but no longer shown — see daily summary at 10pm."""
+    del today_total  # no longer displayed per shopkeeper UX preference
     m = _fmt_money(amount)
-    t = _fmt_money(today_total)
     item_line = f"\n📦 {_fmt_items(items, lang)}" if items else ""
     if lang == "urdu":
-        return f"✅ {m} نقد فروخت لکھ دی۔{item_line}\nآج کی نقد فروخت: {t}\n\nغلط ہے؟ 'undo' لکھیں۔"
+        return f"✅ {m} نقد فروخت لکھ دی۔{item_line}"
     if lang == "english":
-        return f"✅ Cash sale {m}.{item_line}\nToday's cash total: {t}\n\nWrong? Reply 'undo'."
-    return f"✅ Cash sale {m} likh di.{item_line}\nAaj ki cash sales: {t}\n\nGhalat hai? 'undo' likhein."
+        return f"✅ Cash sale {m}.{item_line}"
+    return f"✅ Cash sale {m} likh di.{item_line}"
 
 
 def confirm_payment_received(name: str, amount: float, balance: float, lang: Lang = "roman_urdu") -> str:
@@ -105,15 +106,15 @@ def confirm_payment_received(name: str, amount: float, balance: float, lang: Lan
     b = _fmt_money(balance)
     if lang == "urdu":
         tail = f"{name} کا باقی ادھار: {b}" if balance > 0 else f"{name} کا حساب صاف ہو گیا۔ ✅"
-        return f"✅ {name} سے {m} ملے۔\n{tail}\n\nغلط ہے؟ 'undo' لکھیں۔"
+        return f"✅ {name} سے {m} ملے۔\n{tail}"
     if lang == "english":
         tail = f"{name} still owes {b}." if balance > 0 else f"{name}'s balance is clear. ✅"
-        return f"✅ Received {m} from {name}. {tail}\n\nWrong? Reply 'undo'."
+        return f"✅ Received {m} from {name}. {tail}"
     tail = (
         f"{name} ka baqi udhaar: {b}" if balance > 0
         else f"{name} ka hisaab clear ho gaya. ✅"
     )
-    return f"✅ {name} se {m} received. {tail}\n\nGhalat hai? 'undo' likhein."
+    return f"✅ {name} se {m} received. {tail}"
 
 
 def confirm_payment_made(name: str, amount: float, balance: float, lang: Lang = "roman_urdu") -> str:
@@ -126,7 +127,7 @@ def confirm_payment_made(name: str, amount: float, balance: float, lang: Lang = 
             tail = f"{name} کا حساب صاف ہو گیا۔"
         else:
             tail = f"Supplier payment record ہو گئی۔"  # balance > 0: no prior purchase on record
-        return f"✅ {name} کو {m} دیے۔\n{tail}\n\nغلط ہے؟ 'undo' لکھیں۔"
+        return f"✅ {name} کو {m} دیے۔\n{tail}"
     if lang == "english":
         if balance < 0:
             tail = f"Still owe {name}: {b}."
@@ -134,24 +135,24 @@ def confirm_payment_made(name: str, amount: float, balance: float, lang: Lang = 
             tail = f"{name}'s balance is now clear."
         else:
             tail = "Supplier payment recorded."
-        return f"✅ Paid {m} to {name}. {tail}\n\nWrong? Reply 'undo'."
+        return f"✅ Paid {m} to {name}. {tail}"
     if balance < 0:
         tail = f"Abhi baqi: {name} ko {b} aur dene hain."
     elif balance == 0:
         tail = f"{name} ka hisaab clear ho gaya."
     else:
         tail = "Supplier payment record ho gayi."
-    return f"✅ {name} ko {m} diye. {tail}\n\nGhalat hai? 'undo' likhein."
+    return f"✅ {name} ko {m} diye. {tail}"
 
 
 def confirm_supplier_purchase(name: str, amount: float, balance: float, lang: Lang = "roman_urdu") -> str:
     m = _fmt_money(amount)
     b = _fmt_money(abs(balance))
     if lang == "urdu":
-        return f"✅ {name} سے {m} کا مال ادھار لیا۔\n{name} کو دینا ہے: {b}\n\nغلط ہے؟ 'undo' لکھیں۔"
+        return f"✅ {name} سے {m} کا مال ادھار لیا۔\n{name} کو دینا ہے: {b}"
     if lang == "english":
-        return f"✅ Purchased {m} from {name} on credit. You owe {name} {b}.\n\nWrong? Reply 'undo'."
-    return f"✅ {name} se {m} ka maal udhaar liya. {name} ko dena hai: {b}\n\nGhalat hai? 'undo' likhein."
+        return f"✅ Purchased {m} from {name} on credit. You owe {name} {b}."
+    return f"✅ {name} se {m} ka maal udhaar liya. {name} ko dena hai: {b}"
 
 
 # ============================================================
@@ -694,6 +695,108 @@ def no_udhaar_to_clear(lang: Lang = "roman_urdu") -> str:
     if lang == "english":
         return "No outstanding udhaar to clear — all balances are zero. ✅"
     return "Abhi kisi ka udhaar baqi nahi — sab clear hai. ✅"
+
+
+def tx_one_liner(tx: dict, lang: Lang = "roman_urdu") -> str:
+    """Short one-line summary of a transaction for correction menus."""
+    ttype = tx.get("type", "")
+    amount = float(tx.get("amount") or 0)
+    name = tx.get("contact_name") or ""
+    m = _fmt_money(amount)
+    if ttype == "sale_credit":
+        return f"{name} ko {m} udhaar" if lang != "english" else f"Credit to {name}: {m}"
+    if ttype == "payment_received":
+        return f"{name} se {m} mile" if lang != "english" else f"Received {m} from {name}"
+    if ttype == "sale_cash":
+        return f"Cash sale {m}" if lang != "english" else f"Cash sale {m}"
+    if ttype == "payment_made":
+        return f"{name} ko {m} diye" if lang != "english" else f"Paid {m} to {name}"
+    if ttype == "supplier_purchase":
+        return f"{name} se {m} ka maal" if lang != "english" else f"Stock {m} from {name}"
+    return m
+
+
+def ask_correction_action(summary: str, lang: Lang = "roman_urdu") -> str:
+    """Single recent entry — ask delete or change."""
+    if lang == "urdu":
+        return (
+            f"یہ اندراج ملا:\n*{summary}*\n\n"
+            "کیا کرنا ہے؟\n۱. حذف کریں\n۲. تبدیل کریں (نئی تفصیل بھیجیں)"
+        )
+    if lang == "english":
+        return (
+            f"Found this entry:\n*{summary}*\n\n"
+            "What do you want to do?\n1. Delete\n2. Change (send the new detail)"
+        )
+    return (
+        f"Yeh entry mili:\n*{summary}*\n\n"
+        "Kya karna hai?\n1. Delete karein\n2. Change karein (naye details bhejein)"
+    )
+
+
+def ask_correction_disambiguation(summaries: list[str], lang: Lang = "roman_urdu") -> str:
+    """Multiple recent entries — list and ask which to fix. Takes pre-formatted summaries."""
+    lines = []
+    if lang == "urdu":
+        header = f"پچھلی منٹ میں {len(summaries)} اندراج ہیں:"
+        footer = "کس کو تبدیل کرنا ہے؟ نمبر بھیجیں۔"
+    elif lang == "english":
+        header = f"You have {len(summaries)} entries from the last minute:"
+        footer = "Which one do you want to change? Reply with the number."
+    else:
+        header = f"Pichli minute mein {len(summaries)} entries hain:"
+        footer = "Kis ko change karna hai? Number bhejein."
+    lines.append(header)
+    for i, s in enumerate(summaries, 1):
+        lines.append(f"{i}. {s}")
+    lines.append("")
+    lines.append(footer)
+    return "\n".join(lines)
+
+
+def ask_correction_details(summary: str, lang: Lang = "roman_urdu") -> str:
+    """User chose 'change' — ask for the new detail."""
+    if lang == "urdu":
+        return (
+            f"ٹھیک ہے۔ *{summary}* میں کیا تبدیل کرنا ہے؟ "
+            "مثلاً 'amount 600 تھا' یا 'احمد نہیں علی تھا' بھیجیں۔"
+        )
+    if lang == "english":
+        return (
+            f"OK. What do you want to change in *{summary}*? "
+            "Send e.g. 'amount was 600' or 'it was Ali, not Ahmed'."
+        )
+    return (
+        f"Theek hai. *{summary}* mein kya change karna hai? "
+        "Naye details bhejein, jaise 'amount 600 tha' ya 'Ahmed nahi Ali tha'."
+    )
+
+
+def no_recent_correction(lang: Lang = "roman_urdu") -> str:
+    """No transactions in the recent window."""
+    if lang == "urdu":
+        return (
+            "پچھلی منٹ میں کوئی نیا اندراج نہیں ملا۔ "
+            "تفصیل بتائیں — جیسے 'احمد والی غلط تھی' یا اصل اندراج کا حوالہ دیں۔"
+        )
+    if lang == "english":
+        return (
+            "No entry found in the last minute. "
+            "Please be specific — e.g. 'Ahmed's was wrong' or describe the entry to fix."
+        )
+    return (
+        "Pichli minute mein koi nayi entry nahi mili. "
+        "Specific batayein, jaise 'Ahmed wali galat thi' ya entry ka reference dein."
+    )
+
+
+def correction_cancelled(lang: Lang = "roman_urdu") -> str:
+    """Correction state cancelled (user changed their mind)."""
+    if lang == "urdu":
+        return "ٹھیک ہے، اندراج ویسے ہی رہنے دیا۔"
+    if lang == "english":
+        return "OK, leaving the entry as it is."
+    return "Theek hai, entry waisi hi rehne di."
 
 
 def correction_applied(description: str, lang: Lang = "roman_urdu") -> str:

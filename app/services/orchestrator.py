@@ -74,16 +74,18 @@ async def handle_message(
         return await _handle_contact_confirm(shopkeeper, text, lang)
     if shopkeeper.get("bot_state") == "awaiting_disambiguation":
         return await _handle_disambiguation(shopkeeper, text, lang)
+    if shopkeeper.get("bot_state") == "awaiting_correction_pick":
+        return await _handle_correction_pick(shopkeeper, text, lang)
+    if shopkeeper.get("bot_state") == "awaiting_correction_action":
+        return await _handle_correction_action(shopkeeper, text, lang)
+    if shopkeeper.get("bot_state") == "awaiting_correction_details":
+        return await _handle_correction_details(shopkeeper, text, lang)
 
-    # ---- Cheap shortcut: 'undo' keyword --------------------
+    # ---- Vague undo / "galat hai" --------------------------------------
+    # Always asks delete-or-change; never auto-deletes.
     low = (text or "").strip().lower()
     if low in {"undo", "galat", "ghalat", "galat hai", "ghalat hai", "cancel", "delete"}:
-        removed = await db.soft_delete_last_transaction(str(shopkeeper["id"]))
-        return (
-            replies.undo_success(lang) if removed else replies.undo_nothing(lang),
-            {"intent": "CORRECTION", "action": "undo_last"},
-            None,
-        )
+        return await _handle_vague_correction(shopkeeper, lang)
 
     # ---- Run LLM extraction --------------------------------
     try:
@@ -117,10 +119,9 @@ async def handle_message(
         corr = extraction.correction
         if corr and corr.correction_type != "undo_last":
             reply = await _handle_field_correction(shopkeeper, extraction, lang)
-        else:
-            removed = await db.soft_delete_last_transaction(str(shopkeeper["id"]))
-            reply = replies.undo_success(lang) if removed else replies.undo_nothing(lang)
-        return reply, extraction_json, None
+            return reply, extraction_json, None
+        # Vague undo — same path as keyword shortcut
+        return await _handle_vague_correction(shopkeeper, lang)
 
     if extraction.intent == Intent.SETTINGS_CHANGE and extraction.settings_change:
         reply = await _handle_settings_change(shopkeeper, extraction, lang)
@@ -564,22 +565,14 @@ async def _handle_tx_confirm(
     return reply, pending["extraction"], txn_id
 
 
-async def _handle_field_correction(
-    shopkeeper: dict, extraction: ExtractionResult, lang: str,
+async def _apply_correction_to(
+    txn: dict, corr, sk_id: str, lang: str,
 ) -> str:
-    corr = extraction.correction
-    assert corr is not None
-    sk_id = str(shopkeeper["id"])
-
-    last = await db.get_last_transaction(sk_id)
-    if not last:
-        return replies.correction_not_found(lang)
-
-    txn_id = str(last["id"])
+    """Apply a specific field correction to a given transaction. Returns reply text."""
+    txn_id = str(txn["id"])
 
     if corr.correction_type == "fix_item" and corr.new_item_name:
-        # Replace the first item's name in the items JSONB array
-        items = last.get("items") or []
+        items = txn.get("items") or []
         if isinstance(items, str):
             items = json.loads(items)
         if not items:
@@ -587,24 +580,18 @@ async def _handle_field_correction(
         old_name = items[0].get("name", "")
         items[0]["name"] = corr.new_item_name
         await db.update_transaction(txn_id, items=json.dumps(items))
-        desc = (
-            f"{old_name} → {corr.new_item_name}"
-            if lang == "english"
-            else f"{old_name} → {corr.new_item_name}"
-        )
-        return replies.correction_applied(desc, lang)
+        return replies.correction_applied(f"{old_name} → {corr.new_item_name}", lang)
 
     if corr.correction_type == "fix_amount" and corr.new_amount is not None:
-        old_amount = float(last.get("amount", 0))
+        old_amount = float(txn.get("amount", 0))
         await db.update_transaction(txn_id, amount=corr.new_amount)
-        desc = (
-            f"PKR {int(old_amount):,} → PKR {int(corr.new_amount):,}"
+        return replies.correction_applied(
+            f"PKR {int(old_amount):,} → PKR {int(corr.new_amount):,}", lang
         )
-        return replies.correction_applied(desc, lang)
 
     if corr.correction_type == "fix_customer" and corr.new_customer_name:
         contact_type = (
-            "supplier" if last.get("type") in {"payment_made", "supplier_purchase"}
+            "supplier" if txn.get("type") in {"payment_made", "supplier_purchase"}
             else "customer"
         )
         try:
@@ -613,9 +600,19 @@ async def _handle_field_correction(
         except (UnconfirmedContact, AmbiguousContact):
             contact = await db.create_contact(sk_id, corr.new_customer_name, contact_type)
         await db.update_transaction(txn_id, contact_id=str(contact["id"]))
-        desc = corr.new_customer_name
-        return replies.correction_applied(desc, lang)
+        return replies.correction_applied(corr.new_customer_name, lang)
 
+    return replies.correction_not_found(lang)
+
+
+async def _handle_field_correction(
+    shopkeeper: dict, extraction: ExtractionResult, lang: str,
+) -> str:
+    corr = extraction.correction
+    assert corr is not None
+    sk_id = str(shopkeeper["id"])
+
+    # clear_all_udhaar is shop-wide, not a per-transaction edit
     if corr.correction_type == "clear_all_udhaar":
         customers = await db.get_customers_with_positive_balance(sk_id)
         if not customers:
@@ -628,12 +625,242 @@ async def _handle_field_correction(
                 for c in customers
             ],
         }
-        await db.update_shopkeeper(sk_id, bot_state="awaiting_bulk_clear_confirm", pending_tx=json.dumps(pending))
+        await db.update_shopkeeper(
+            sk_id, bot_state="awaiting_bulk_clear_confirm", pending_tx=json.dumps(pending)
+        )
         return replies.ask_bulk_clear_confirm(len(customers), total, lang)
 
-    # fallback — undo
-    removed = await db.soft_delete_last_transaction(sk_id)
-    return replies.undo_success(lang) if removed else replies.undo_nothing(lang)
+    # Scope specific edits to the recent (60s) window
+    recent = await db.get_recent_transactions(sk_id, within_seconds=60)
+
+    if len(recent) == 0:
+        # No recent — fall back to last transaction (covers "fix Ahmed wala 600 nahi 500"
+        # said hours later when the LLM successfully extracted the field change)
+        last = await db.get_last_transaction(sk_id)
+        if not last:
+            return replies.correction_not_found(lang)
+        return await _apply_correction_to(last, corr, sk_id, lang)
+
+    if len(recent) == 1:
+        return await _apply_correction_to(recent[0], corr, sk_id, lang)
+
+    # 2+ recent entries — disambiguate, save the pending correction
+    summaries = [replies.tx_one_liner(t, lang) for t in recent]
+    pending = {
+        "mode": "specific",
+        "entries": [
+            {"id": str(t["id"]), "summary": s}
+            for t, s in zip(recent, summaries)
+        ],
+        "correction": corr.model_dump(mode="json"),
+    }
+    await db.update_shopkeeper(
+        sk_id, bot_state="awaiting_correction_pick", pending_tx=json.dumps(pending)
+    )
+    return replies.ask_correction_disambiguation(summaries, lang)
+
+
+# --------------------------------------------------------
+# Vague correction flow (undo / "galat hai" — never auto-deletes)
+# --------------------------------------------------------
+
+async def _handle_vague_correction(
+    shopkeeper: dict, lang: str,
+) -> tuple[str, dict | None, str | None]:
+    sk_id = str(shopkeeper["id"])
+    extraction_json = {"intent": "CORRECTION", "action": "vague_undo"}
+
+    recent = await db.get_recent_transactions(sk_id, within_seconds=60)
+
+    if len(recent) == 0:
+        return replies.no_recent_correction(lang), extraction_json, None
+
+    if len(recent) == 1:
+        tx = recent[0]
+        summary = replies.tx_one_liner(tx, lang)
+        pending = {"mode": "vague", "txn_id": str(tx["id"]), "summary": summary}
+        await db.update_shopkeeper(
+            sk_id,
+            bot_state="awaiting_correction_action",
+            pending_tx=json.dumps(pending),
+        )
+        return replies.ask_correction_action(summary, lang), extraction_json, None
+
+    # 2+ recent — disambiguate
+    summaries = [replies.tx_one_liner(t, lang) for t in recent]
+    pending = {
+        "mode": "vague",
+        "entries": [
+            {"id": str(t["id"]), "summary": s}
+            for t, s in zip(recent, summaries)
+        ],
+    }
+    await db.update_shopkeeper(
+        sk_id, bot_state="awaiting_correction_pick", pending_tx=json.dumps(pending)
+    )
+    return replies.ask_correction_disambiguation(summaries, lang), extraction_json, None
+
+
+async def _handle_correction_pick(
+    shopkeeper: dict, text: str, lang: str,
+) -> tuple[str, dict | None, str | None]:
+    """User picked a number from the recent-entries disambiguation list."""
+    sk_id = str(shopkeeper["id"])
+    raw_pending = shopkeeper.get("pending_tx")
+    if not raw_pending:
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.generic_error(lang), None, None
+
+    pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
+    entries = pending.get("entries", [])
+    summaries = [e["summary"] for e in entries]
+
+    choice = text.strip()
+    if not choice.isdigit():
+        # Not a number — cancel this state and let the message be handled fresh
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.correction_cancelled(lang), None, None
+
+    idx = int(choice) - 1
+    if not (0 <= idx < len(entries)):
+        # Out of range — re-prompt
+        return replies.ask_correction_disambiguation(summaries, lang), None, None
+
+    selected = entries[idx]
+    txn_id = selected["id"]
+    summary = selected["summary"]
+
+    if pending.get("mode") == "vague":
+        new_pending = {"mode": "vague", "txn_id": txn_id, "summary": summary}
+        await db.update_shopkeeper(
+            sk_id,
+            bot_state="awaiting_correction_action",
+            pending_tx=json.dumps(new_pending),
+        )
+        return replies.ask_correction_action(summary, lang), None, None
+
+    # mode == "specific" — apply the saved correction to the picked entry
+    from ..models import schemas as _schemas
+    corr_data = pending.get("correction") or {}
+    try:
+        corr = _schemas.ExtractedCorrection.model_validate(corr_data)
+    except Exception as e:  # noqa: BLE001
+        log.error("orchestrator.correction_pick.invalid", error=str(e))
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.generic_error(lang), None, None
+
+    txn = await db.get_transaction_by_id(txn_id)
+    if not txn:
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.correction_not_found(lang), None, None
+
+    await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+    reply = await _apply_correction_to(txn, corr, sk_id, lang)
+    return reply, None, None
+
+
+async def _handle_correction_action(
+    shopkeeper: dict, text: str, lang: str,
+) -> tuple[str, dict | None, str | None]:
+    """User chose: 1=delete, 2=change, or sent a direct correction."""
+    sk_id = str(shopkeeper["id"])
+    raw_pending = shopkeeper.get("pending_tx")
+    if not raw_pending:
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.generic_error(lang), None, None
+
+    pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
+    txn_id = pending.get("txn_id")
+    summary = pending.get("summary", "")
+    if not txn_id:
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.correction_not_found(lang), None, None
+
+    low = (text or "").strip().lower()
+    delete_tokens = {"1", "delete", "hata", "hata do", "remove", "حذف"}
+    change_tokens = {"2", "change", "edit", "modify", "تبدیل"}
+
+    if low in delete_tokens:
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        deleted = await db.soft_delete_transaction_by_id(txn_id)
+        if deleted:
+            return replies.undo_success(lang), None, None
+        return replies.correction_not_found(lang), None, None
+
+    if low in change_tokens:
+        # Move to awaiting_correction_details — keep the txn_id so next message
+        # is treated as a CORRECTION applied to this transaction.
+        await db.update_shopkeeper(
+            sk_id,
+            bot_state="awaiting_correction_details",
+            pending_tx=json.dumps({"txn_id": txn_id, "summary": summary}),
+        )
+        return replies.ask_correction_details(summary, lang), None, None
+
+    # User sent a direct correction message ("amount 600 tha") — extract & apply
+    try:
+        extraction: ExtractionResult = await llm.extract(text, is_voice=False)
+    except Exception as e:  # noqa: BLE001
+        log.error("orchestrator.correction_action.extract_failed", error=str(e))
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.generic_error(lang), None, None
+
+    if extraction.intent == Intent.CORRECTION and extraction.correction \
+            and extraction.correction.correction_type != "undo_last":
+        txn = await db.get_transaction_by_id(txn_id)
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        if not txn:
+            return replies.correction_not_found(lang), None, None
+        reply = await _apply_correction_to(txn, extraction.correction, sk_id, lang)
+        return reply, extraction.model_dump(), None
+
+    # Couldn't parse it as a correction — cancel and let user start over
+    await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+    return replies.correction_cancelled(lang), None, None
+
+
+async def _handle_correction_details(
+    shopkeeper: dict, text: str, lang: str,
+) -> tuple[str, dict | None, str | None]:
+    """User picked 'change' and is now sending the new detail."""
+    sk_id = str(shopkeeper["id"])
+    raw_pending = shopkeeper.get("pending_tx")
+    if not raw_pending:
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.generic_error(lang), None, None
+
+    pending = json.loads(raw_pending) if isinstance(raw_pending, str) else raw_pending
+    txn_id = pending.get("txn_id")
+    if not txn_id:
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.correction_not_found(lang), None, None
+
+    try:
+        extraction: ExtractionResult = await llm.extract(text, is_voice=False)
+    except Exception as e:  # noqa: BLE001
+        log.error("orchestrator.correction_details.extract_failed", error=str(e))
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        return replies.generic_error(lang), None, None
+
+    if extraction.intent == Intent.CORRECTION and extraction.correction \
+            and extraction.correction.correction_type != "undo_last":
+        txn = await db.get_transaction_by_id(txn_id)
+        await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+        if not txn:
+            return replies.correction_not_found(lang), None, None
+        reply = await _apply_correction_to(txn, extraction.correction, sk_id, lang)
+        return reply, extraction.model_dump(), None
+
+    # If the user instead sent a brand-new transaction, cancel state and process it
+    await db.update_shopkeeper(sk_id, bot_state="idle", pending_tx=None)
+    if extraction.intent == Intent.TRANSACTION and extraction.transaction:
+        reply, new_txn_id = await _handle_transaction(
+            shopkeeper, extraction, lang,
+            raw_message=text, transcript=None, source="text",
+        )
+        return reply, extraction.model_dump(), new_txn_id
+
+    return replies.correction_cancelled(lang), None, None
 
 
 async def _handle_bulk_clear_confirm(
