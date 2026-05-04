@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.3.0] — 2026-05-04 — Per-shop Whisper vocabulary biasing (self-improving STT)
+
+### Added
+- `app/services/vocabulary.py` — builds a per-shopkeeper vocabulary
+  string and feeds it to Whisper as the `prompt` parameter. Whisper
+  uses this to bias transcription toward the shop's customers,
+  suppliers, and products. Result: proper nouns transcribe stably
+  ("Akbar Trader" stays "Akbar Trader" instead of becoming "Akbar
+  Tarader" / "Akbar Trade-er" across calls).
+- `db.get_recent_product_names(sk_id, limit)` — returns most-used
+  product names from the `items` JSONB across past transactions.
+- In-memory cache with 5-min TTL keyed by shopkeeper_id; ~7μs lookup
+  on hit. Auto-invalidated on `create_contact()` so a brand-new
+  customer name appears in the very next voice transcript.
+- `stt.transcribe()` accepts an optional `prompt` parameter.
+
+### Why
+- Voice notes are the bot's main input channel for these shopkeepers,
+  and Whisper's accuracy on Pakistani names was a noticeable weak
+  spot. Whisper's `prompt` parameter is the right tool — it's free
+  (no extra API calls), takes ~77 tokens for a shop with 40 customers
+  + 15 products (well under the 224-token budget), and the bot
+  literally improves itself as the shopkeeper logs more transactions.
+
+### Self-improving loop
+1. Shopkeeper sends voice → Whisper transcribes (with biased vocab)
+2. LLM extracts a customer name → contact_matcher resolves or creates
+3. New contact insert invalidates vocab cache
+4. Next voice from this shop uses an updated vocabulary
+
+---
+
 ## [0.2.4] — 2026-05-02 — Shop-rename via LLM intent (SETTINGS_CHANGE)
 
 ### Changed

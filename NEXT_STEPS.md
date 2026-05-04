@@ -96,6 +96,28 @@ to say. Iterate on the prompt based on the first 100 real messages.
 
 ---
 
+## C2. Self-improving loop — next phases (after Whisper biasing in 0.3.0)
+
+The 0.3.0 vocabulary biasing is phase 1. Two more phases to consider
+once real traffic shows where the remaining errors are:
+
+- [ ] **Dynamic LLM few-shot per shop** — keep a rolling buffer of the
+      last 5–8 successful (raw_message, extraction_json) pairs per
+      shopkeeper. Inject them into the LLM extraction prompt as
+      additional examples. This adapts the extractor to each
+      shopkeeper's individual phrasing/code-mixing style. Use the
+      `messages` table as the source.
+- [ ] **Correction-driven alias dictionary** — when a shopkeeper does
+      `fix_customer` (e.g. "Ahmed nahi Ali tha"), log the pair
+      (heard_name → correct_name) into a new table per shop. Feed
+      these into the Whisper prompt as explicit pronunciation hints,
+      AND into the LLM extraction prompt as "if you hear X, the
+      shopkeeper probably means Y" rules.
+- [ ] **Per-shop confidence threshold** — track ratio of (low-confidence
+      extractions confirmed) vs (cancelled). If a shopkeeper consistently
+      accepts low-confidence extractions, lower their threshold so the
+      bot stops asking. If they reject often, raise it.
+
 ## C. Small improvements to make in the first week of real traffic
 
 These are known rough edges you'll want to polish once you see real

@@ -27,11 +27,19 @@ def _groq() -> AsyncOpenAI:
     return _client
 
 
-async def transcribe(audio_bytes: bytes, filename: str = "voice.ogg") -> str:
+async def transcribe(
+    audio_bytes: bytes,
+    filename: str = "voice.ogg",
+    prompt: str = "",
+) -> str:
     """
     Transcribe audio bytes to text via Groq's whisper-large-v3.
     Urdu is hinted as the primary language; the model still handles
     code-mixed Urdu/English/Roman-Urdu speech well.
+
+    `prompt` is a vocabulary-biasing string (~224-token Whisper budget).
+    Pass the shopkeeper's known customer/product names to dramatically
+    improve transcription accuracy on proper nouns. See vocabulary.py.
     """
     settings = get_settings()
     if not settings.groq_api_key:
@@ -48,10 +56,17 @@ async def transcribe(audio_bytes: bytes, filename: str = "voice.ogg") -> str:
             language="ur",
             response_format="text",
             temperature=0.0,
+            prompt=prompt,
         )
         text = resp if isinstance(resp, str) else getattr(resp, "text", str(resp))
         text = (text or "").strip()
-        log.info("stt.ok", chars=len(text), provider="groq", model=settings.groq_whisper_model)
+        log.info(
+            "stt.ok",
+            chars=len(text),
+            provider="groq",
+            model=settings.groq_whisper_model,
+            prompt_chars=len(prompt),
+        )
         return text
     except Exception as e:  # noqa: BLE001
         log.error("stt.failed", error=str(e), provider="groq")

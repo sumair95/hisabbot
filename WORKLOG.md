@@ -5,6 +5,64 @@ Read this when resuming in a new session to know exactly where you are.
 
 ---
 
+## 2026-05-04 — Self-improving STT via Whisper vocabulary biasing
+
+**Goal:** make the bot transcribe more accurately as each shopkeeper
+logs more transactions. User wanted "the bot to improve over time".
+
+**Strategy chosen:**
+Whisper's `prompt` parameter accepts ~224 tokens of vocabulary that
+biases transcription. Feed the shopkeeper's known customer/supplier
+names + recent product names + a static seed of common Roman-Urdu
+bookkeeping vocabulary. Whisper then produces stable, consistent
+transcripts for proper nouns it would otherwise misspell.
+
+This is a true compounding loop:
+- More transactions → richer vocabulary → better transcription →
+  better extraction → fewer corrections → smoother experience.
+
+**Done:**
+- New `app/services/vocabulary.py`:
+  - `get_shop_vocabulary(sk_id)` builds the prompt string
+  - 5-min in-memory TTL cache (~7μs hit time)
+  - `invalidate(sk_id)` for explicit drop
+  - Caps: 40 contacts + 15 products + static seed (~77 tokens)
+- New `db.get_recent_product_names(sk_id, limit=15)` — pulls
+  most-frequent product names from `items` JSONB.
+- `stt.transcribe()` accepts optional `prompt` parameter, passed to
+  Whisper API. Logs `prompt_chars` so usage is observable.
+- `webhook.py` voice path: fetches vocabulary right before STT,
+  passes to `transcribe()`. Cached so cost is negligible.
+- `db.create_contact()` invalidates the vocab cache so brand-new
+  customer names show up in the very next voice without waiting for
+  the 5-min TTL.
+
+**Tested locally:**
+- Vocabulary builder produces ~309-char (~77-token) string with
+  realistic shop data — within Whisper's 224-token budget with
+  plenty of headroom.
+- Cache hit ~7μs — essentially free on subsequent calls.
+- All file syntax validated.
+
+**Future improvements (not done — flagged in NEXT_STEPS):**
+- Dynamic LLM few-shot: track last 5 successful (message, extraction)
+  pairs per shop and inject as additional examples in the LLM prompt.
+  Adapts the LLM to each shopkeeper's phrasing style.
+- Correction tracking: when the user does fix_customer, log
+  (heard_name, correct_name) and use as an explicit pronunciation
+  alias dictionary. Would also feed into the Whisper prompt.
+- Per-shop confidence calibration: track when low-confidence
+  extractions get confirmed vs cancelled, adjust the threshold per
+  shop.
+
+**Decisions:**
+- Whisper biasing first because it's the highest-leverage and
+  simplest intervention — one parameter, immediate effect.
+- In-memory cache (not Redis) because Railway runs a single instance
+  for now. Will need to revisit if scaled out.
+
+---
+
 ## 2026-05-02 — Shop-rename moved to LLM intent (final)
 
 **Goal:** make the shop rename actually work, after two failed

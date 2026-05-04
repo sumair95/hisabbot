@@ -101,6 +101,7 @@ async def create_contact(
 ) -> dict[str, Any]:
     from ..utils.names import normalize_name as _norm
     from .contact_matching import _invalidate
+    from . import vocabulary as _vocab
     norm = _norm(name)
     async with conn() as c:
         row = await c.fetchrow(
@@ -114,6 +115,7 @@ async def create_contact(
             shopkeeper_id, name.strip(), norm, contact_type,
         )
     _invalidate(shopkeeper_id)
+    _vocab.invalidate(shopkeeper_id)
     return dict(row)
 
 
@@ -500,6 +502,31 @@ async def get_category_breakdown(
             shopkeeper_id, tz, day,
         )
     return [dict(r) for r in rows]
+
+
+async def get_recent_product_names(
+    shopkeeper_id: str, limit: int = 15,
+) -> list[str]:
+    """Most-used product names across this shop's transactions, by usage count."""
+    async with conn() as c:
+        rows = await c.fetch(
+            """
+            SELECT item->>'name' AS name, COUNT(*) AS uses
+            FROM transactions, jsonb_array_elements(items) AS item
+            WHERE shopkeeper_id = $1
+              AND is_deleted = FALSE
+              AND items IS NOT NULL
+              AND items != 'null'::jsonb
+              AND jsonb_array_length(items) > 0
+              AND item->>'name' IS NOT NULL
+              AND item->>'name' != 'unknown'
+            GROUP BY item->>'name'
+            ORDER BY uses DESC
+            LIMIT $2
+            """,
+            shopkeeper_id, limit,
+        )
+    return [r["name"] for r in rows if r["name"]]
 
 
 async def count_voice_today(shopkeeper_id: str, tz: str = "Asia/Karachi") -> int:
