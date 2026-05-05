@@ -507,6 +507,24 @@ def generic_error(lang: Lang = "roman_urdu") -> str:
 # Voice reply toggle
 # ============================================================
 
+def voice_no_speech_detected(lang: Lang = "roman_urdu") -> str:
+    """VAD/duration check rejected the audio — pre-API."""
+    if lang == "urdu":
+        return "🎙 وائس نوٹ میں آواز نہیں آئی۔ ذرا قریب سے دوبارہ ریکارڈ کریں۔"
+    if lang == "english":
+        return "🎙 Couldn't hear any speech in that voice note. Please record again, closer to the mic."
+    return "🎙 Voice note mein awaaz nahi aayi. Mic ke qareeb se dobara record karein."
+
+
+def voice_low_confidence(lang: Lang = "roman_urdu") -> str:
+    """Whisper accepted the audio but its own confidence metrics are poor."""
+    if lang == "urdu":
+        return "🎙 وائس نوٹ صاف نہیں سنائی دیا۔ شور کم کر کے دوبارہ بھیجیں یا ٹیکسٹ لکھ دیں۔"
+    if lang == "english":
+        return "🎙 The voice note wasn't clear enough. Please try again with less background noise, or send a text."
+    return "🎙 Voice note saaf nahi aayi. Shor kam karke dobara bhejein ya text likh dein."
+
+
 def voice_reply_enabled(lang: Lang = "roman_urdu") -> str:
     if lang == "urdu":
         return "🔊 وائس ریپلائی آن کر دی۔ جب آپ وائس نوٹ بھیجیں گے میں بھی آواز میں جواب دوں گا۔\nبند کرنے کے لیے: 'voice off' لکھیں۔"

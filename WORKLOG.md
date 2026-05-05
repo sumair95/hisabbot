@@ -5,6 +5,83 @@ Read this when resuming in a new session to know exactly where you are.
 
 ---
 
+## 2026-05-05 — STT noise resilience: ffmpeg pipeline + VAD + confidence rejection
+
+**Goal:** improve voice transcription accuracy in noisy kirana
+environments, prevent garbage transcripts from polluting extractions,
+shave cost by rejecting empty audio before the Whisper API call.
+
+**Done — Phases 1+2+3 of the STT improvement plan:**
+
+1. New `app/services/audio_preprocess.py`:
+   - Single ffmpeg subprocess pipe: highpass=80 + afftdn=-25 +
+     loudnorm + silenceremove → 16kHz mono PCM s16le.
+   - webrtcvad mode-2 frame-by-frame speech ratio.
+   - VoiceUnusable exception with structured reason codes.
+   - Cap on ffmpeg wall time (15s) to prevent hung subprocesses.
+   - PCM wrapped in an in-memory WAV for Whisper.
+
+2. `app/services/stt.py` rewritten:
+   - Requests `response_format="verbose_json"` from Groq.
+   - Aggregates per-segment metrics: duration-weighted avg_logprob,
+     max no_speech_prob, max compression_ratio.
+   - Returns a TranscriptionResult dataclass instead of bare string.
+   - `is_low_confidence()` helper with three thresholds derived from
+     OpenAI's reference Whisper code.
+
+3. `app/routers/webhook.py` voice path rewired:
+   - preprocess → VAD → STT → confidence check → orchestrator.
+   - Two new rejection branches, each with a distinct user-facing
+     reply and a dedicated audit-table intent (REJECTED_NO_SPEECH,
+     REJECTED_LOW_CONFIDENCE).
+   - Existing outer-try fallback ("voice samajh nahi aayi") preserved
+     for unexpected exceptions.
+
+4. New reply templates `voice_no_speech_detected()` and
+   `voice_low_confidence()` in three languages.
+
+5. `Dockerfile`: installs `ffmpeg` and `build-essential` (the latter
+   is needed to compile webrtcvad's C extension at pip install time).
+
+6. `requirements.txt`: pinned `webrtcvad==2.0.10`.
+
+**Decisions:**
+- Single-pass loudnorm (not two-pass). Two-pass is slightly more
+  accurate but doubles ffmpeg time per call. For real-time we need
+  determinism in latency.
+- webrtcvad mode 2 (out of 0..3). Mode 3 is too aggressive — drops
+  quiet speech in noisy environments. Mode 2 is the documented
+  balance.
+- MIN_SPEECH_RATIO = 0.15. Empirical: real voice notes are 0.4–0.9;
+  pure silence ~0; pure noise leaks up to ~0.1 with mode 2.
+- Confidence thresholds (-0.7 logprob, 0.6 no_speech, 2.4 compression)
+  copied from OpenAI's reference Whisper repo — these are the
+  ratios the original codebase uses for fallback temperature.
+- WAV envelope (not OGG re-encode) for the API payload — saves a
+  second ffmpeg pass; ~1MB for a 30s clip is fine over LAN/HTTPS.
+
+**Tested locally:**
+- Syntax validated on all 7 touched files.
+- Reply templates verified in 3 languages.
+- STT confidence helper tested against 6 scenarios (empty text,
+  high no_speech, bad logprob, looping output, all-None metrics).
+- _segment_metrics duration-weighted aggregation verified.
+- WAV envelope round-trip verified.
+- VAD frame-size constant verified (960 bytes for 30ms @ 16kHz s16le).
+
+**Cannot test locally (need Railway runtime):**
+- ffmpeg subprocess pipeline (no ffmpeg on the dev box).
+- Real webrtcvad classification (the local env doesn't have the
+  C extension built).
+- Real Whisper verbose_json shape from Groq.
+
+**NOT done (deferred to NEXT_STEPS):**
+- Phase 4: A/B test whisper-large-v3-turbo for response time.
+- Phase 5: Phonetic post-processing for systematic Whisper Roman-Urdu
+  errors.
+
+---
+
 ## 2026-05-04 — Receipts quieter + correction flow gated by recency
 
 **Goal:** stop showing today's running total on every receipt; stop

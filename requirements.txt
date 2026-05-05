@@ -22,6 +22,10 @@ openai==1.51.0
 # Fuzzy string matching (for customer name resolution)
 rapidfuzz==3.10.0
 
+# Voice Activity Detection — small native extension, used to reject
+# empty/silent voice notes before paying for a Whisper API call.
+webrtcvad==2.0.10
+
 # Logging
 structlog==24.4.0
 

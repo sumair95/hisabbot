@@ -1,5 +1,61 @@
 # Changelog
 
+## [0.4.0] — 2026-05-05 — STT pipeline: ffmpeg + VAD + confidence rejection
+
+This is the noise-resilience and bad-transcript-rejection package
+(Phases 1+2+3 of the STT improvement plan).
+
+### Added
+- `app/services/audio_preprocess.py` — single-pass ffmpeg pipeline:
+    highpass=80Hz       — cuts fan/traffic/AC rumble
+    afftdn=nf=-25       — FFT denoiser, suppresses stationary noise
+    loudnorm=I=-16      — normalizes quiet voices to broadcast level
+    silenceremove       — trims leading/trailing dead air
+    -> 16kHz mono PCM s16le, wrapped as in-memory WAV for Whisper.
+- Voice Activity Detection on the cleaned PCM via webrtcvad (mode 2,
+  30ms frames). If `speech_ratio < 0.15`, raise VoiceUnusable so the
+  webhook rejects empty / pure-noise / pocket-recording voice notes
+  BEFORE paying for a Whisper API call.
+- `VoiceUnusable` exception with reason codes (`empty_audio`,
+  `too_short`, `no_speech_detected`, `ffmpeg_failed_rc_*`,
+  `ffmpeg_timeout`, `ffmpeg_not_installed`).
+- `stt.transcribe()` now requests `response_format="verbose_json"`
+  and returns a `TranscriptionResult` dataclass carrying
+  `text + duration_sec + avg_logprob + no_speech_prob +
+  compression_ratio + language`.
+- `stt.is_low_confidence(result)` — checks against three thresholds
+  (no_speech_prob > 0.6, avg_logprob < -0.7, compression_ratio > 2.4)
+  to detect garbled or hallucinated transcripts.
+- New reply templates `voice_no_speech_detected()` and
+  `voice_low_confidence()` for the two new rejection paths
+  (Roman-Urdu, Urdu, English).
+
+### Changed
+- Webhook voice path: preprocess → VAD → STT → confidence check →
+  orchestrator. Two new rejection branches with distinct user-facing
+  messages and audit-table entries (intent `REJECTED_NO_SPEECH`,
+  `REJECTED_LOW_CONFIDENCE`).
+- Dockerfile installs `ffmpeg` and `build-essential` (the latter is
+  needed to compile webrtcvad's C extension during `pip install`).
+- `requirements.txt` pinned `webrtcvad==2.0.10`.
+
+### Why
+- Kirana shops have constant background noise (fans, traffic,
+  customer chatter). Without preprocessing, Whisper accuracy drops
+  meaningfully in the bottom voice-quality tier.
+- Pre-API VAD prevents Whisper hallucinations on silent/noise-only
+  audio (model occasionally invents text from non-speech).
+- verbose_json metrics let us refuse low-confidence transcripts
+  before they reach the LLM extractor and produce wrong transactions.
+
+### Acceptance criteria
+- Quiet voice notes: still pass through unchanged, full transcript.
+- Noisy voice notes: cleaner transcripts; the REJECTED_LOW_CONFIDENCE
+  branch fires only on truly unintelligible audio.
+- Empty / accidental voice notes: rejected before STT, no API spend.
+
+---
+
 ## [0.3.1] — 2026-05-04 — Quieter receipts, smarter corrections
 
 ### Changed

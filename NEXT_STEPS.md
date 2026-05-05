@@ -96,6 +96,19 @@ to say. Iterate on the prompt based on the first 100 real messages.
 
 ---
 
+## C1. STT improvements — remaining phases (after 0.4.0 ships ffmpeg+VAD+confidence)
+
+- [ ] **Phase 4: A/B test `whisper-large-v3-turbo`** — Groq's faster
+      distilled variant, ~2× lower latency. Make the model name a
+      feature flag, run 50/50 traffic split for 1 week, compare
+      extraction confidence and shopkeeper correction rates. Decide
+      with data, not vibes.
+- [ ] **Phase 5: Phonetic post-processing** — once production data
+      shows systematic Whisper errors on Roman-Urdu (e.g. "duo hazar"
+      vs "do hazaar", number-word variants, honorific spellings),
+      apply targeted regex fixes between STT and LLM extraction. This
+      compounds with vocabulary biasing and the alias dictionary.
+
 ## C2. Self-improving loop — next phases (after Whisper biasing in 0.3.0)
 
 The 0.3.0 vocabulary biasing is phase 1. Two more phases to consider

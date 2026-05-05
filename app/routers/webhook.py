@@ -10,7 +10,8 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, JSONResponse
 
 from ..config import get_settings
-from ..services import db, orchestrator, replies, stt, tts, vocabulary, whatsapp
+from ..services import audio_preprocess, db, orchestrator, replies, stt, tts, vocabulary, whatsapp
+from ..services.audio_preprocess import VoiceUnusable
 from ..utils.logging import get_logger
 
 _VOICE_ON_PHRASES  = {"voice on", "voice reply on", "audio on", "awaz on"}
@@ -143,13 +144,58 @@ async def _process_one_message(msg: dict, value: dict) -> None:
             if already_processed:
                 log.info("webhook.duplicate", wa_id=wa_id)
                 return
-            ext = "ogg" if "ogg" in mime else "mp3"
-            # Bias Whisper toward this shop's known customers + products.
-            # Cached, so this is cheap on subsequent voice notes.
-            vocab_prompt = await vocabulary.get_shop_vocabulary(str(shopkeeper["id"]))
-            transcript = await stt.transcribe(
-                audio_bytes, filename=f"voice.{ext}", prompt=vocab_prompt,
+
+            sk_id_local = str(shopkeeper["id"])
+            lang_local = shopkeeper.get("language_pref") or "roman_urdu"
+
+            # ---- Phase 1+2: clean audio + reject empty/silence/noise ----
+            try:
+                pre = await audio_preprocess.preprocess_audio(audio_bytes)
+            except VoiceUnusable as exc:
+                log.info(
+                    "webhook.voice_rejected_pre_stt",
+                    reason=exc.reason,
+                    speech_ratio=exc.speech_ratio,
+                )
+                await whatsapp.send_text(
+                    phone_number, replies.voice_no_speech_detected(lang_local),
+                )
+                await db.log_message(
+                    shopkeeper_id=sk_id_local, wa_message_id=wa_id,
+                    direction="inbound", kind="voice",
+                    content=None, transcript=None, intent="REJECTED_NO_SPEECH",
+                )
+                return
+
+            # ---- Bias Whisper toward this shop's known vocabulary ----
+            vocab_prompt = await vocabulary.get_shop_vocabulary(sk_id_local)
+
+            # ---- STT (verbose_json so we get confidence metrics) ----
+            stt_result = await stt.transcribe(
+                pre.wav_bytes, filename="voice.wav", prompt=vocab_prompt,
             )
+
+            # ---- Phase 3: reject if Whisper isn't confident ----
+            if stt.is_low_confidence(stt_result):
+                log.info(
+                    "webhook.voice_rejected_low_confidence",
+                    avg_logprob=stt_result.avg_logprob,
+                    no_speech_prob=stt_result.no_speech_prob,
+                    compression_ratio=stt_result.compression_ratio,
+                    chars=len(stt_result.text),
+                )
+                await whatsapp.send_text(
+                    phone_number, replies.voice_low_confidence(lang_local),
+                )
+                await db.log_message(
+                    shopkeeper_id=sk_id_local, wa_message_id=wa_id,
+                    direction="inbound", kind="voice",
+                    content=None, transcript=stt_result.text or None,
+                    intent="REJECTED_LOW_CONFIDENCE",
+                )
+                return
+
+            transcript = stt_result.text
             text_content = transcript
         except Exception as e:  # noqa: BLE001
             log.error("webhook.voice_failed", error=str(e))

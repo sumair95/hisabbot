@@ -7,9 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps (minimal)
+# System deps:
+#   ffmpeg — audio preprocessing pipeline (HPF, denoise, loudnorm, silence trim)
+#   build-essential — needed to compile the webrtcvad native extension
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl \
+    ca-certificates curl ffmpeg build-essential \
   && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
