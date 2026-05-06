@@ -1,0 +1,22 @@
+# Treat these as binary so git's CRLF/LF normalization doesn't corrupt them.
+*.pdf       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+*.ogg       binary
+*.mp3       binary
+*.wav       binary
+*.opus      binary
+
+# Keep Python scripts as LF — Railway runs Linux, so LF is correct on disk
+*.py        text eol=lf
+*.md        text
+*.txt       text
+*.json      text
+*.toml      text
+*.yaml      text
+*.yml       text
