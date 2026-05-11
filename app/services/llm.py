@@ -61,6 +61,15 @@ async def _extract_anthropic(text: str, is_voice: bool) -> dict[str, Any]:
         messages=[{"role": "user", "content": _build_user_prompt(text, is_voice)}],
         extra_headers={"anthropic-beta": "prompt-caching-2024-07-31"},
     )
+    usage = getattr(resp, "usage", None)
+    log.info(
+        "llm.anthropic.ok",
+        model=settings.anthropic_model,
+        input_tokens=getattr(usage, "input_tokens", None),
+        output_tokens=getattr(usage, "output_tokens", None),
+        cache_read=getattr(usage, "cache_read_input_tokens", 0),
+        cache_creation=getattr(usage, "cache_creation_input_tokens", 0),
+    )
     raw = "".join(b.text for b in resp.content if hasattr(b, "text"))
     return _parse_json_lenient(raw)
 
