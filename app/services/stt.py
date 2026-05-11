@@ -26,14 +26,21 @@ log = get_logger("stt")
 _client: AsyncOpenAI | None = None
 
 
-# Confidence thresholds. These are conservative defaults derived from
-# OpenAI's reference Whisper code:
-#   * avg_logprob < -1.0 indicates very poor token probability;
-#     -0.7 catches most garbled / wrong-language hallucinations
-#   * no_speech_prob > 0.6 indicates the model itself thinks this is silence
-#   * compression_ratio > 2.4 indicates repeated/looping output
-LOW_LOGPROB_THRESHOLD = -0.7
-HIGH_NO_SPEECH_THRESHOLD = 0.6
+# Confidence thresholds, matched to OpenAI's reference Whisper rejection
+# logic (whisper/decoding.py). Real kirana-shop audio has fan/traffic/customer
+# noise that elevates no_speech_prob and depresses avg_logprob even when the
+# transcript is correct — so we use the reference values, NOT tighter ones.
+#
+#   * avg_logprob < -1.0     — token probability genuinely too poor
+#   * no_speech_prob > 0.85  — model is highly confident this is silence
+#   * compression_ratio > 2.4 — repeated/looping output (hallucination)
+#
+# Crucially, is_low_confidence() requires BOTH the logprob and no-speech
+# checks to fire together (the reference behaviour), not either alone.
+# compression_ratio is checked standalone because looping output is a
+# distinct failure mode.
+LOW_LOGPROB_THRESHOLD = -1.0
+HIGH_NO_SPEECH_THRESHOLD = 0.85
 HIGH_COMPRESSION_THRESHOLD = 2.4
 
 
@@ -124,22 +131,29 @@ async def transcribe(
 
 def is_low_confidence(r: TranscriptionResult) -> bool:
     """
-    Return True if any of the verbose_json metrics indicate Whisper isn't
-    confident in this transcript. Used by the webhook to ask the shopkeeper
-    to re-record instead of feeding garbage to the LLM extractor.
+    Return True only when Whisper genuinely isn't confident. Matches OpenAI's
+    reference rejection logic: the no-speech and logprob conditions must hold
+    *together* — either alone is too eager and rejects real speech recorded
+    in noisy environments (which is the entire kirana shop use case).
 
-    Note: empty text is also treated as low-confidence (the model returned
-    nothing usable).
+    Compression ratio is checked standalone because runaway looping output
+    is a distinct failure mode independent of the speech/logprob signals.
+
+    Empty text is treated as low-confidence (model returned nothing).
     """
     if not r.text:
         return True
-    if r.no_speech_prob is not None and r.no_speech_prob > HIGH_NO_SPEECH_THRESHOLD:
-        return True
-    if r.avg_logprob is not None and r.avg_logprob < LOW_LOGPROB_THRESHOLD:
-        return True
     if r.compression_ratio is not None and r.compression_ratio > HIGH_COMPRESSION_THRESHOLD:
         return True
-    return False
+    high_no_speech = (
+        r.no_speech_prob is not None
+        and r.no_speech_prob > HIGH_NO_SPEECH_THRESHOLD
+    )
+    low_logprob = (
+        r.avg_logprob is not None
+        and r.avg_logprob < LOW_LOGPROB_THRESHOLD
+    )
+    return high_no_speech and low_logprob
 
 
 # -------------------- helpers --------------------

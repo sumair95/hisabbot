@@ -46,9 +46,13 @@ VAD_FRAME_BYTES = SAMPLE_RATE * VAD_FRAME_MS // 1000 * 2
 VAD_AGGRESSIVENESS = 2
 
 # Minimum fraction of frames classified as speech to consider audio usable.
-# Real voice notes empirically land at 0.4–0.9; pure silence ~0; pure noise
-# can leak up to ~0.1 with mode 2.
-MIN_SPEECH_RATIO = 0.15
+# Real voice notes in QUIET environments land at 0.4–0.9; in a crowded
+# kirana shop the surrounding chatter pushes the apparent speech ratio of
+# the shopkeeper's own voice down to ~0.10–0.15 because the noise frames
+# get classified as speech too. 0.08 is the empirical floor that still
+# excludes pure silence and pocket-recordings without rejecting real
+# (noisy) voice notes. Pure noise with mode 2 typically lands below 0.05.
+MIN_SPEECH_RATIO = 0.08
 
 # Anything shorter than this after preprocessing is almost certainly an
 # accidental tap — reject without a Whisper call.
@@ -80,9 +84,13 @@ class PreprocessResult:
 #   2. denoiser before loudnorm (so we don't amplify residual noise)
 #   3. loudnorm before silenceremove (so threshold has a stable reference)
 #   4. silenceremove last
+# afftdn noise floor is intentionally -20 (not -25). -25 is more aggressive
+# at scrubbing stationary noise, but in crowded shops it also eats real
+# speech consonants — Whisper recovers from residual noise better than from
+# missing phonemes. -20 leaves more speech detail intact.
 _FFMPEG_FILTERGRAPH = (
     "highpass=f=80,"
-    "afftdn=nf=-25,"
+    "afftdn=nf=-20,"
     "loudnorm=I=-16:TP=-1.5:LRA=11,"
     "silenceremove="
         "start_periods=1:start_threshold=-50dB:start_silence=0.5:"
