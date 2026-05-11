@@ -10,8 +10,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse, JSONResponse
 
 from ..config import get_settings
-from ..services import audio_preprocess, db, orchestrator, replies, stt, tts, vocabulary, whatsapp
-from ..services.audio_preprocess import VoiceUnusable
+from ..services import db, orchestrator, replies, stt, tts, vocabulary, whatsapp
 from ..utils.logging import get_logger
 
 _VOICE_ON_PHRASES  = {"voice on", "voice reply on", "audio on", "awaz on"}
@@ -38,6 +37,25 @@ def _contains(text: str, phrases: set) -> bool:
 def _word_match(text: str, words: set) -> bool:
     """True if text is ONLY one of the given words (short command)."""
     return text.strip() in words
+
+
+def _stt_filename_for_mime(mime: str | None) -> str:
+    """Pick the filename extension Groq Whisper will use to decode the audio."""
+    m = (mime or "").lower()
+    if "ogg" in m or "opus" in m:
+        return "voice.ogg"
+    if "mpeg" in m or "mp3" in m:
+        return "voice.mp3"
+    if "mp4" in m or "m4a" in m or "aac" in m:
+        return "voice.m4a"
+    if "wav" in m:
+        return "voice.wav"
+    if "webm" in m:
+        return "voice.webm"
+    if "flac" in m:
+        return "voice.flac"
+    # WhatsApp voice notes default to OGG/Opus
+    return "voice.ogg"
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 log = get_logger("webhook")
@@ -148,15 +166,9 @@ async def _process_one_message(msg: dict, value: dict) -> None:
             sk_id_local = str(shopkeeper["id"])
             lang_local = shopkeeper.get("language_pref") or "roman_urdu"
 
-            # ---- Phase 1+2: clean audio + reject empty/silence/noise ----
-            try:
-                pre = await audio_preprocess.preprocess_audio(audio_bytes)
-            except VoiceUnusable as exc:
-                log.info(
-                    "webhook.voice_rejected_pre_stt",
-                    reason=exc.reason,
-                    speech_ratio=exc.speech_ratio,
-                )
+            # ---- Empty-bytes guard (Meta media fetch returned nothing) ----
+            if not audio_bytes:
+                log.info("webhook.voice_rejected_pre_stt", reason="empty_audio")
                 await whatsapp.send_text(
                     phone_number, replies.voice_no_speech_detected(lang_local),
                 )
@@ -170,9 +182,16 @@ async def _process_one_message(msg: dict, value: dict) -> None:
             # ---- Bias Whisper toward this shop's known vocabulary ----
             vocab_prompt = await vocabulary.get_shop_vocabulary(sk_id_local)
 
-            # ---- STT (verbose_json so we get confidence metrics) ----
+            # ---- STT directly on the raw WhatsApp audio. We deliberately
+            # do NOT preprocess (no highpass/denoise/loudnorm/VAD): the
+            # 0.4.0 pipeline degraded speech detail before Whisper saw it,
+            # hurting name + Roman-Urdu word recognition in real shop
+            # recordings. Whisper-large-v3 is trained on raw noisy audio
+            # and recovers consonants better when the signal is intact.
+            # is_low_confidence below still rejects empty / looping output.
+            stt_filename = _stt_filename_for_mime(mime)
             stt_result = await stt.transcribe(
-                pre.wav_bytes, filename="voice.wav", prompt=vocab_prompt,
+                audio_bytes, filename=stt_filename, prompt=vocab_prompt,
             )
 
             # ---- Phase 3: reject if Whisper isn't confident ----
